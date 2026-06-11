@@ -151,7 +151,32 @@ Task:
 
 Work in cwd: {self.cwd}
 Return the deliverable. If you modify files, state exact paths. If read-only, do not modify files."""
-        cmd = ["claude", "-p", prompt, "--output-format", "json"]
+        allowed_tools = ",".join([
+            "Read",
+            "Edit",
+            "Write",
+            "MultiEdit",
+            "Bash(git diff*)",
+            "Bash(git status*)",
+            "Bash(git ls-files*)",
+            "Bash(git add*)",
+            "Bash(git commit*)",
+            "Bash(git push*)",
+            "Bash(python3 -m unittest*)",
+            "Bash(python3 -m py_compile*)",
+            "Bash(bash -n*)",
+        ])
+        cmd = [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--permission-mode",
+            "acceptEdits",
+            "--allowedTools",
+            allowed_tools,
+        ]
         selected_model = model_override or self.worker_model
         if selected_model:
             cmd.extend(["--model", selected_model])
