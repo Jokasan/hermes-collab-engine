@@ -53,6 +53,29 @@ class CollabStore:
         completed_sql = ", completed_at=CURRENT_TIMESTAMP" if status in {"completed", "failed"} else ""
         self._execute(f"UPDATE runs SET status=?, updated_at=CURRENT_TIMESTAMP{completed_sql} WHERE id=?", (status, run_id))
 
+    def fail_stale_run(self, run_id: str, reason: str) -> None:
+        """Mark an interrupted run and any in-flight work as failed.
+
+        This is intentionally conservative: completed nodes/workers are left intact,
+        running work becomes failed, and unscheduled pending work is marked failed so
+        dashboards never keep showing a parent process that was interrupted as live.
+        """
+        self._execute(
+            "UPDATE workers SET status='failed', error=COALESCE(error, ?), updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status='running'",
+            (reason, run_id),
+        )
+        self._execute(
+            "UPDATE wbs_nodes SET status='failed', error=COALESCE(error, ?), updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status IN ('running','pending')",
+            (reason, run_id),
+        )
+        self.update_run(run_id, "failed")
+        self.log(run_id, "error", "run interrupted; stale running work marked failed", {"reason": reason})
+        self.add_lesson(
+            "interrupt-cleanup",
+            "Interrupted parent runs must fail/close all running workers and pending/running WBS nodes; otherwise dashboards can show stale ghost-running work.",
+            {"run_id": run_id, "reason": reason},
+        )
+
     def insert_wbs_node(self, run_id: str, node: dict[str, Any]) -> None:
         self._execute(
             """INSERT OR REPLACE INTO wbs_nodes(id,run_id,parent_id,title,description,capability,complexity,dependencies_json,parallelizable,deliverable,status,attempt,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",

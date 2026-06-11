@@ -79,6 +79,18 @@ def prompt(text, default=''):
     return raw or default
 
 
+def choose_interaction_mode():
+    choice = choose(
+        '选择操作方式',
+        [
+            'Web 面板操作（使用浏览器中的任务输入窗口，推荐）',
+            'Hermes 命令行操作（进入终端交互）',
+        ],
+        1,
+    )
+    return 'cli' if 'Hermes 命令行' in choice else 'web'
+
+
 def get_config_from_files():
     profiles = collect_profiles()
     if not profiles:
@@ -195,17 +207,24 @@ def main():
     print(f'管理面板已启动：http://{display_host}:{port}')
     print(f'服务日志：{log_path}')
 
+    interaction_mode = choose_interaction_mode()
     hermes_cmd = ['hermes', '--provider', 'anthropic', '--model', leader_model]
-    print('\n正在进入 Hermes 命令行...')
-    print('退出 Hermes 后，本启动脚本会停止本次启动的管理面板。\n')
 
     try:
+        if interaction_mode == 'web':
+            print('\n已选择 Web 面板操作。')
+            print(f'请在浏览器打开：http://{display_host}:{port}')
+            print('你可以直接在面板中的任务输入窗口提交协同任务。')
+            print('按 Ctrl-C 退出时，本启动脚本会停止本次启动的管理面板。\n')
+            while True:
+                time.sleep(60)
+        print('\n正在进入 Hermes 命令行...')
+        print('退出 Hermes 后，本启动脚本会停止本次启动的管理面板。\n')
         if os.environ.get('OPC_SKIP_HERMES') == '1':
             print('OPC_SKIP_HERMES=1，跳过进入 Hermes（用于测试启动脚本）。')
             while True:
                 time.sleep(60)
-        else:
-            subprocess.run(hermes_cmd, env=run_env, cwd=cwd)
+        subprocess.run(hermes_cmd, env=run_env, cwd=cwd)
     except KeyboardInterrupt:
         pass
     finally:

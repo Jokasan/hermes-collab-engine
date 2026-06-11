@@ -1,5 +1,11 @@
 # Hermes Collab Engine
 
+<p align="center">
+  <a href="README.md">简体中文</a> |
+  <a href="README.en.md">English</a> |
+  <a href="README.ja.md">日本語</a>
+</p>
+
 > 面向官方 Hermes Agent 与 Claude Code 的协同执行引擎：自动判断任务复杂度，按 WBS 拆解，多执行器并行分发，超时自动拆分重试，SQLite 持久化，并提供中文管理面板。
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](#环境要求)
@@ -26,9 +32,9 @@ opc
 3. 选择 Worker Agent 模型；
 4. 选择管理面板监听地址、端口和默认工作目录；
 5. 启动协同引擎管理面板；
-6. 自动进入官方 Hermes 命令行。
+6. 选择操作方式：使用 Web 面板里的任务输入窗口，或进入官方 Hermes 命令行。
 
-退出 Hermes 命令行后，`opc` 会停止本次启动的管理面板服务。
+退出所选操作方式后，`opc` 会停止本次启动的管理面板服务。默认推荐使用 Web 面板操作，因为面板已经内置任务输入窗口；需要终端交互时再选择 Hermes 命令行。
 
 ## 它解决什么问题
 

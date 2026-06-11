@@ -42,48 +42,52 @@ class CollabEngine:
             self.store.insert_wbs_node(run_id, node.to_dict())
         self.store.update_run(run_id, "running")
 
-        results: list[WorkerResult] = []
-        pending = {n.id: n for n in nodes}
-        completed: set[str] = set()
-        failed_final: list[WorkerResult] = []
+        try:
+            results: list[WorkerResult] = []
+            pending = {n.id: n for n in nodes}
+            completed: set[str] = set()
+            failed_final: list[WorkerResult] = []
 
-        while pending:
-            ready = [n for n in pending.values() if all(dep in completed for dep in n.dependencies)]
-            if not ready:
-                # Break dependency deadlocks by running the first pending node and logging it.
-                ready = [next(iter(pending.values()))]
-                self.store.log(run_id, "warning", "dependency deadlock avoided", {"node": ready[0].id})
+            while pending:
+                ready = [n for n in pending.values() if all(dep in completed for dep in n.dependencies)]
+                if not ready:
+                    # Break dependency deadlocks by running the first pending node and logging it.
+                    ready = [next(iter(pending.values()))]
+                    self.store.log(run_id, "warning", "dependency deadlock avoided", {"node": ready[0].id})
 
-            batch = ready[:max(1, concurrency)]
-            for node in batch:
-                pending.pop(node.id, None)
+                batch = ready[:max(1, concurrency)]
+                for node in batch:
+                    pending.pop(node.id, None)
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
-                futs = [pool.submit(self._run_node_with_retries, run_id, node, timeout, max_retries, split_count) for node in batch]
-                for fut in concurrent.futures.as_completed(futs):
-                    node_results = fut.result()
-                    results.extend(node_results)
-                    if any(r.ok for r in node_results):
-                        # Mark the original node as covered if parent or any shard succeeded.
-                        completed.add(batch[futs.index(fut)].id)
-                    else:
-                        failed_final.extend(node_results)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+                    futs = [pool.submit(self._run_node_with_retries, run_id, node, timeout, max_retries, split_count) for node in batch]
+                    for fut in concurrent.futures.as_completed(futs):
+                        node_results = fut.result()
+                        results.extend(node_results)
+                        if any(r.ok for r in node_results):
+                            # Mark the original node as covered if parent or any shard succeeded.
+                            completed.add(batch[futs.index(fut)].id)
+                        else:
+                            failed_final.extend(node_results)
 
-        final = None
-        if aggregate:
-            final = self._aggregate(run_id, request, results, timeout)
-        self._learn(run_id, results)
+            final = None
+            if aggregate:
+                final = self._aggregate(run_id, request, results, timeout)
+            self._learn(run_id, results)
 
-        ok = not failed_final and (final.ok if final else True)
-        self.store.update_run(run_id, "completed" if ok else "failed")
-        self.store.log(run_id, "info" if ok else "error", "run finished", {"ok": ok})
-        return {
-            "run_id": run_id,
-            "ok": ok,
-            "complexity": score.to_dict(),
-            "results": [r.to_dict() for r in results],
-            "aggregate": final.to_dict() if final else None,
-        }
+            ok = not failed_final and (final.ok if final else True)
+            self.store.update_run(run_id, "completed" if ok else "failed")
+            self.store.log(run_id, "info" if ok else "error", "run finished", {"ok": ok})
+            return {
+                "run_id": run_id,
+                "ok": ok,
+                "complexity": score.to_dict(),
+                "results": [r.to_dict() for r in results],
+                "aggregate": final.to_dict() if final else None,
+            }
+        except BaseException as exc:
+            self.store.fail_stale_run(run_id, f"interrupted: {type(exc).__name__}: {exc}")
+            raise
 
     def _run_node_with_retries(self, run_id: str, node: WBSNode, timeout: int, max_retries: int, split_count: int) -> list[WorkerResult]:
         self.store.update_node(node.id, "running")
