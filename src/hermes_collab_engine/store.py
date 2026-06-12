@@ -173,8 +173,8 @@ class CollabStore:
         return [dict(r) for r in self._query("SELECT * FROM node_results WHERE run_id=? ORDER BY node_id", (run_id,))]
 
     def save_context_snapshot(self, run_id: str, snapshot_type: str, snapshot: dict[str, Any], node_id: str | None = None) -> None:
-        if snapshot_type not in {"node_completed", "checkpoint"}:
-            raise ValueError("snapshot_type must be 'node_completed' or 'checkpoint'")
+        if snapshot_type not in {"node_completed", "checkpoint", "pre_compaction"}:
+            raise ValueError("snapshot_type must be 'node_completed', 'checkpoint', or 'pre_compaction'")
         self._execute(
             """INSERT INTO context_snapshots(run_id,snapshot_type,node_id,snapshot_json) VALUES(?,?,?,?)""",
             (run_id, snapshot_type, node_id, json.dumps(snapshot, ensure_ascii=False)),

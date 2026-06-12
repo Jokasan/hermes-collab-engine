@@ -315,6 +315,10 @@ class CollabEngine:
         self.store.save_node_result(run_id, result.node_id, result_text, result.result_struct)
         self._save_context_snapshot(run_id, "node_completed", result.node_id)
 
+    def build_context_snapshot(self, run_id: str) -> dict[str, Any]:
+        """Public API for building a context snapshot (used by CLI save-snapshot)."""
+        return self._build_context_snapshot(run_id)
+
     def _save_context_snapshot(self, run_id: str, snapshot_type: str, node_id: str | None = None) -> None:
         self.store.save_context_snapshot(run_id, snapshot_type, self._build_context_snapshot(run_id), node_id)
 

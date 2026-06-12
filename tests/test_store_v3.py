@@ -110,7 +110,7 @@ class StoreV3Tests(unittest.TestCase):
             store = CollabStore(Path(tmp) / "db.sqlite3")
 
             with self.assertRaises(ValueError):
-                store.save_context_snapshot("run_1", "pre_compaction", {}, None)
+                store.save_context_snapshot("run_1", "invalid_type", {}, None)
 
     def test_save_and_load_run_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

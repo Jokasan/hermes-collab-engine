@@ -175,6 +175,16 @@ def main() -> int:
     context_snapshot.add_argument("--latest", action="store_true")
     context_snapshot.add_argument("--type", choices=("pre_compaction", "node_completed", "checkpoint"), dest="snapshot_type")
 
+    save_snapshot = sub.add_parser("save-snapshot", help="Manually save a context snapshot (e.g. before compaction)")
+    save_snapshot.add_argument("--db", default="data/collab.sqlite3")
+    save_snapshot.add_argument("--cwd", default=".")
+    save_snapshot.add_argument("run_id")
+    save_snapshot.add_argument("--type", choices=("pre_compaction", "node_completed", "checkpoint"), dest="snapshot_type", default="pre_compaction")
+    save_snapshot.add_argument("--node-id", default=None)
+    save_snapshot.add_argument("--decisions", default=None, help="JSON array of decision strings")
+    save_snapshot.add_argument("--user-instructions", default=None, help="JSON array of user instruction strings")
+    save_snapshot.add_argument("--json", action="store_true")
+
     redo_node = sub.add_parser("redo-node", help="Create a redo node while keeping the source node for audit")
     redo_node.add_argument("--db", default="data/collab.sqlite3")
     redo_node.add_argument("--cwd", default=".")
@@ -302,6 +312,25 @@ def main() -> int:
             if args.latest:
                 result = result[-1:] if result else []
             _json_print(result, pretty=True)
+            return 0
+        except Exception as exc:
+            print(f"error: {exc}")
+            return 1
+
+    if args.cmd == "save-snapshot":
+        engine = CollabEngine(args.db, args.cwd)
+        try:
+            snapshot = engine.build_context_snapshot(args.run_id)
+            # Inject externally-provided decisions and user instructions
+            if args.decisions:
+                import json as _json
+                snapshot["decisions"] = _json.loads(args.decisions)
+            if args.user_instructions:
+                import json as _json
+                snapshot["user_instructions"] = _json.loads(args.user_instructions)
+            engine.store.save_context_snapshot(args.run_id, args.snapshot_type, snapshot, args.node_id)
+            result = {"ok": True, "run_id": args.run_id, "snapshot_type": args.snapshot_type, "node_id": args.node_id}
+            _json_print(result, pretty=getattr(args, "json", False))
             return 0
         except Exception as exc:
             print(f"error: {exc}")
