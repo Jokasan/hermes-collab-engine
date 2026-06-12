@@ -380,8 +380,92 @@ v0.2 相对 v0.1 的新增协议点：
 11. ❌ 低风险 checkpoint 强制人工 resume——会制造不必要阻塞；低风险、窄 scope 节点应按 policy auto-resume，并写审计日志。
 12. ❌ checkpoint timeout 设得过长或无限等待——会让 `checkpoint_paused_nodes` / `paused_runs` 变成隐性死锁；必须设置有界 timeout 并在 except/finally / shutdown 清理。
 
-## 7. 待办（未来版本）
+## 7. Agent Backend Protocol (v3.5)
+
+v3.5 引入可插拔 Agent Backend 系统，替代硬编码的 `claude` CLI 调用。每个 Backend 定义如何调用和解析特定编码代理的输出。
+
+### 7.1 AgentBackend 接口
+
+```python
+@dataclass
+class AgentBackend:
+    name: str                    # "claude-code" | "codex" | "opencode" | custom
+    command: list[str]           # ["claude"] | ["codex"] | ["opencode"]
+    prompt_flag: str             # "-p" | "--prompt"
+    output_format_flags: list[str]  # ["--output-format", "json"] | []
+    supports_model_flag: bool
+    model_flag: str              # "--model"
+    permission_flags: list[str] | None  # ["--permission-mode", "acceptEdits"]
+    allowed_tools_flag: str | None      # "--allowedTools"
+    output_parser: str           # "claude_json" | "raw_text" | "codex_json"
+    process_pattern: str         # 用于 kill-node 进程匹配
+    prompt_prefix: str           # 注入 agent 角色前缀
+    prompt_suffix: str           # 注入 agent 角色后缀
+    default_allowed_tools: list[str]
+```
+
+### 7.2 命令构建
+
+```python
+def build_command(prompt, model=None, allowed_tools=None) -> list[str]
+```
+
+Engine 的 `_run_worker` 调用此方法构建完整命令，替代原来的硬编码逻辑。
+
+### 7.3 输出解析
+
+```python
+def parse_output(stdout, stderr, returncode, ...) -> dict
+```
+
+返回统一格式的 dict，包含 `ok`, `result`, `session_id`, `returncode`, `stderr`, `result_struct`。
+
+三种内置解析器：
+- **claude_json**: 解析 Claude Code 的 JSON envelope（`result`, `session_id`, `is_error`）
+- **raw_text**: 直接使用 stdout 文本，不解析 JSON，ok = returncode==0
+- **codex_json**: 解析 Codex 的 JSON envelope（`output`, `session_id`, `error`）
+
+### 7.4 注册与发现
+
+```bash
+# 列出所有已注册 backend
+hermes-collab agents
+
+# 只显示 PATH 上可用的 backend
+hermes-collab agents --available
+
+# 启动 run 时选择 agent
+hermes-collab run "task" --agent codex
+hermes-collab run "task" --agent claude-code  # 默认
+```
+
+API: `GET /api/agents` → 返回可用的 backend 列表
+
+### 7.5 运行时注册
+
+```python
+from hermes_collab_engine.agents import register_backend, AgentBackend
+
+custom = AgentBackend(
+    name="my-agent",
+    display_name="My Custom Agent",
+    command=["my-agent-cli"],
+    prompt_flag="--prompt",
+    ...
+)
+register_backend(custom)
+```
+
+### 7.6 向后兼容
+
+- 默认 agent 是 `claude-code`，现有行为不变
+- 所有 CLI 命令不加 `--agent` 时等同于 `--agent claude-code`
+- Engine 构造函数 `agent=None` 时 fallback 到 `claude-code`
+- `runs` 表新增 `agent` 列（默认 `claude-code`），旧数据自动填充
+
+## 8. 待办（未来版本）
 
 - v0.4 计划：lessons 表加 `tags` 字段，CLI `lesson list --tag X`。
 - v0.5 计划：worker → worker 直接消息（pub/sub via SQLite trigger），用于真正异步协作；当前 Engine 中转模型已能覆盖 90% 场景。
+- v0.6 计划：Dashboard HTML 加入 agent 选择下拉框，新 run 时可选 agent。
 - v1.0 计划：把 ACP-Collab 抽到独立 schema 文件 + JSON-Schema 验证。
