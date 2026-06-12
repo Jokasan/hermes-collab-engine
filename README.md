@@ -2,6 +2,8 @@
 
 多 Agent 协同引擎：Leader 拆解任务，Worker 并行执行，面板实时可视化。
 
+![像素协同工位仪表盘](docs/screenshots/dashboard.png)
+
 ## 快速开始
 
 ```bash

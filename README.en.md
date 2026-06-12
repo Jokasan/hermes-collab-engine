@@ -2,6 +2,8 @@
 
 Multi-Agent Collaboration Engine: A Leader decomposes tasks, Workers execute in parallel, and a dashboard provides real-time visualization.
 
+![Pixel Collab Office Dashboard](docs/screenshots/dashboard.png)
+
 ## Quick Start
 
 ```bash

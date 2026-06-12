@@ -20,3 +20,13 @@ venv/
 
 # Logs
 *.log
+
+# Build artifacts
+*.egg-info/
+build/
+dist/
+uv.lock
+
+# Working backups
+*.bak
+*.bak.*
