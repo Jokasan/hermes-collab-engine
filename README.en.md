@@ -18,6 +18,39 @@ opc
 
 After launching, choose a configuration method → select a model → the dashboard starts automatically.
 
+## Sandbox Demo
+
+The repo ships with an isolated sandbox that uses sanitized SQLite + Mock API. **It never calls real workers and never writes production data**, making it ideal for local or demo-machine showcasing.
+
+```bash
+# One-shot launcher (default: 2-hour run, auto-stops on timeout)
+./scripts/start_sandbox.sh
+
+# Custom duration
+./scripts/start_sandbox.sh 4              # 4 hours
+./scripts/start_sandbox.sh 0.5            # 30 minutes
+./scripts/start_sandbox.sh --hours 8      # 8 hours
+./scripts/start_sandbox.sh --port 8877    # custom port
+./scripts/start_sandbox.sh -i             # ask interactively
+
+# Reuse existing DB, skip reseeding
+./scripts/start_sandbox.sh --no-reseed
+```
+
+Then open: `http://127.0.0.1:8876/`
+
+Details: [`sandbox/README.md`](sandbox/README.md)
+
+## Leader Summary Diary
+
+When a run finishes (completed/failed), the dashboard pops up a **pixel-notebook diary** that prints the Leader's final aggregated feedback in full:
+
+- Auto-pops on completion (no duplicate pops within a session)
+- Click 📓 in the history table to reopen any run's summary
+- Built-in scrollbar handles long reports
+- One-click Copy / Download as Markdown
+- Press ESC or click the backdrop to close
+
 ## Core Concepts
 
 ```

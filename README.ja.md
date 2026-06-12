@@ -18,6 +18,39 @@ opc
 
 起動後に設定方式を選択 → モデルを選択 → ダッシュボードが自動的に起動します。
 
+## サンドボックスデモ
+
+リポジトリには本番環境と完全に隔離されたサンドボックスが同梱されています。匿名化済み SQLite + モック API を使用し、**真の Worker を起動せず、本番データに書き込みもしない** ため、ローカルやデモ機での画面紹介に最適です。
+
+```bash
+# ワンコマンド起動（デフォルト 2 時間でタイムアウト停止）
+./scripts/start_sandbox.sh
+
+# 実行時間をカスタマイズ
+./scripts/start_sandbox.sh 4              # 4 時間
+./scripts/start_sandbox.sh 0.5            # 30 分
+./scripts/start_sandbox.sh --hours 8      # 8 時間
+./scripts/start_sandbox.sh --port 8877    # ポート変更
+./scripts/start_sandbox.sh -i             # 対話的に時間を尋ねる
+
+# 既存 DB を流用しシード再生成をスキップ
+./scripts/start_sandbox.sh --no-reseed
+```
+
+起動後アクセス：`http://127.0.0.1:8876/`
+
+詳細：[`sandbox/README.md`](sandbox/README.md)
+
+## Leader 総括ダイアリー
+
+タスクが終了（completed/failed）すると、ダッシュボードは **ピクセル絵本風のダイアリー** をポップアップ表示し、Leader の最終集約フィードバックを全文プリントします：
+
+- 完了時に自動表示（同一セッション内では重複表示しない）
+- 履歴テーブル内の 📓 ボタンで任意の run の総括を再表示可能
+- 内蔵スクロールバーにより長文レポートでも完全閲覧可能
+- ワンクリックでコピー / Markdown ダウンロード
+- ESC または背景クリックで閉じる
+
 ## コアコンセプト
 
 ```

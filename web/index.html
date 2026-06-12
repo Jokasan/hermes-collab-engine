@@ -593,6 +593,132 @@ tr.run-row:hover{background:var(--bg-2)}
   .left-stack > .logs-panel{min-height:220px}
   .canvas-frame{aspect-ratio:16/10}
 }
+
+/* ============================================================
+   Leader 日记本 overlay（任务收尾的总结反馈）
+   - 像素本子 / 暖色羊皮纸 / 软像素阴影
+   - 内容区限高 + 滚动条 + 复制下载工具栏
+   ============================================================ */
+.diary-overlay{
+  position:fixed;inset:0;z-index:90;display:none;
+  background:radial-gradient(ellipse at center,rgba(20,10,28,.78),rgba(8,4,16,.92));
+  backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:24px;
+  animation:diaryFadeIn .18s ease-out;
+}
+.diary-overlay.show{display:flex}
+@keyframes diaryFadeIn{from{opacity:0}to{opacity:1}}
+.diary-book{
+  position:relative;
+  width:min(960px,96vw);height:min(82vh,820px);
+  display:flex;
+  filter:drop-shadow(0 8px 0 rgba(0,0,0,.55)) drop-shadow(0 24px 40px rgba(0,0,0,.6));
+  animation:diaryRise .26s cubic-bezier(.2,.8,.3,1);
+}
+@keyframes diaryRise{from{transform:translateY(20px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.diary-spine{
+  width:18px;background:
+    linear-gradient(180deg,#3b1d18 0%,#5a2f24 50%,#3b1d18 100%);
+  border-right:2px solid #1d0c08;
+  border-radius:6px 0 0 6px;
+  box-shadow:inset -3px 0 0 rgba(0,0,0,.45);
+}
+.diary-cover{
+  flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;
+  background:
+    linear-gradient(180deg,#fbe9c4 0%,#f3d8a5 100%);
+  border:3px solid #2a1a10;
+  border-left:none;
+  border-radius:0 8px 8px 0;
+  padding:18px 22px 12px;
+  position:relative;
+  color:#2a1a10;
+  font-family:'VT323','PingFang SC','Microsoft YaHei',monospace;
+}
+.diary-cover::before{ /* 装订线 */
+  content:'';position:absolute;left:0;top:14px;bottom:14px;width:2px;
+  background:repeating-linear-gradient(180deg,#a06a3f 0 6px,transparent 6px 12px);
+}
+.diary-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  border-bottom:2px dashed #a06a3f;padding-bottom:8px;margin-bottom:10px;
+}
+.diary-stamp{
+  font-family:'Press Start 2P','VT323','PingFang SC',sans-serif;
+  font-size:12px;letter-spacing:1px;color:#7a3015;
+  background:#fff5dc;border:2px solid #7a3015;border-radius:4px;
+  padding:6px 10px;transform:rotate(-2deg);
+  box-shadow:2px 2px 0 #7a3015;
+}
+.diary-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:14px;color:#5c3a1f}
+.diary-runid{font-family:'JetBrains Mono',monospace;font-size:12px;color:#7a3015;background:#fff5dc;padding:2px 6px;border-radius:3px}
+.diary-time{font-size:13px}
+.diary-title{
+  font-family:'Press Start 2P','PingFang SC','Microsoft YaHei',sans-serif;
+  font-size:16px;letter-spacing:1px;color:#3a1a08;
+  margin:4px 0 8px;text-shadow:1px 1px 0 #fff5dc;
+}
+.diary-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.diary-spacer{flex:1}
+.diary-btn{
+  font-family:'VT323','PingFang SC',monospace;font-size:15px;
+  background:#fff5dc;color:#3a1a08;border:2px solid #3a1a08;
+  padding:4px 12px;cursor:pointer;border-radius:3px;
+  box-shadow:2px 2px 0 #3a1a08;transition:transform .08s ease;
+}
+.diary-btn:hover{background:#ffe8b8}
+.diary-btn:active{transform:translate(2px,2px);box-shadow:0 0 0 #3a1a08}
+.diary-close{background:#f4b5a0;border-color:#7a1f0d;color:#7a1f0d;box-shadow:2px 2px 0 #7a1f0d}
+.diary-close:hover{background:#f59880}
+.diary-content{
+  flex:1;overflow:auto;min-height:0;
+  background:
+    repeating-linear-gradient(180deg,transparent 0 28px,rgba(122,80,40,.18) 28px 29px),
+    #fffaf0;
+  border:2px solid #7a3015;border-radius:4px;
+  padding:14px 18px;
+  font-family:'PingFang SC','Microsoft YaHei','VT323',monospace;
+  font-size:15px;line-height:29px;color:#2a1a10;
+  white-space:pre-wrap;word-break:break-word;
+  scrollbar-width:thin;scrollbar-color:#7a3015 #fffaf0;
+}
+.diary-content::-webkit-scrollbar{width:12px;height:12px}
+.diary-content::-webkit-scrollbar-track{background:#f3d8a5;border-radius:6px}
+.diary-content::-webkit-scrollbar-thumb{background:#7a3015;border-radius:6px;border:2px solid #f3d8a5}
+.diary-content::-webkit-scrollbar-thumb:hover{background:#5a200a}
+.diary-content h1,.diary-content h2,.diary-content h3{font-family:'Press Start 2P','PingFang SC',sans-serif;color:#5a200a;margin:8px 0 6px;line-height:1.4}
+.diary-content h1{font-size:18px;border-bottom:2px solid #7a3015;padding-bottom:4px}
+.diary-content h2{font-size:16px}
+.diary-content h3{font-size:14px}
+.diary-content code{background:#fff1c8;border:1px solid #7a3015;padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:13px}
+.diary-content pre{background:#fff1c8;border:2px solid #7a3015;border-radius:4px;padding:8px 12px;overflow:auto;font-size:13px;line-height:1.5;font-family:'JetBrains Mono',monospace}
+.diary-content table{border-collapse:collapse;margin:6px 0;width:100%;font-size:14px}
+.diary-content th,.diary-content td{border:1px solid #7a3015;padding:4px 8px;text-align:left}
+.diary-content th{background:#f3d8a5;font-weight:bold}
+.diary-content blockquote{border-left:4px solid #7a3015;background:#fff1c8;margin:6px 0;padding:6px 12px;color:#3a1a08}
+.diary-content ul,.diary-content ol{padding-left:24px;margin:6px 0}
+.diary-content a{color:#7a1f0d;text-decoration:underline}
+.diary-content .empty{color:#7a3015;text-align:center;padding:40px 20px;font-style:italic}
+.diary-foot{
+  margin-top:8px;font-size:13px;color:#7a3015;text-align:center;
+  border-top:2px dashed #a06a3f;padding-top:6px;
+}
+
+/* 任务完成 toast/通知按钮：触发打开日记本 */
+.diary-trigger{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#7a3015;color:#fff5dc;border:2px solid #2a1a10;
+  padding:4px 10px;border-radius:3px;cursor:pointer;
+  font-family:'VT323','PingFang SC',monospace;font-size:14px;
+  box-shadow:2px 2px 0 #2a1a10;
+}
+.diary-trigger:hover{background:#5a200a}
+
+@media(max-width:760px){
+  .diary-book{height:90vh}
+  .diary-cover{padding:14px 14px 10px}
+  .diary-content{font-size:14px;line-height:26px}
+}
 </style>
 </head>
 <body>
@@ -719,6 +845,31 @@ tr.run-row:hover{background:var(--bg-2)}
     <h2 id="detailTitle"></h2>
     <div class="sub" id="detailSub"></div>
     <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- ╭─ Leader 反馈日记本 ─────────────────────────╮ -->
+<div class="diary-overlay" id="diaryOverlay" role="dialog" aria-modal="true" aria-labelledby="diaryTitle">
+  <div class="diary-book">
+    <div class="diary-spine" aria-hidden="true"></div>
+    <div class="diary-cover">
+      <div class="diary-head">
+        <div class="diary-stamp">📓 LEADER 日记本</div>
+        <div class="diary-meta">
+          <span id="diaryRunId" class="diary-runid"></span>
+          <span id="diaryTime" class="diary-time"></span>
+        </div>
+      </div>
+      <h2 id="diaryTitle" class="diary-title">任务总结</h2>
+      <div class="diary-toolbar">
+        <button class="diary-btn" id="diaryCopyBtn" type="button" title="复制全部内容">复制</button>
+        <button class="diary-btn" id="diaryDownloadBtn" type="button" title="下载为 Markdown">下载</button>
+        <span class="diary-spacer"></span>
+        <button class="diary-btn diary-close" id="diaryCloseBtn" type="button" aria-label="关闭日记本">关闭 ×</button>
+      </div>
+      <div id="diaryContent" class="diary-content" tabindex="0"></div>
+      <div class="diary-foot">由 Leader Worker 在任务收尾阶段写入 · ESC 或点击空白处关闭</div>
+    </div>
   </div>
 </div>
 
@@ -1148,8 +1299,13 @@ function renderRuns(){
   const filtered=state.runs.filter(r=>!filter||String(r.id).toLowerCase().includes(filter)||String(r.title||'').toLowerCase().includes(filter));
   $('runSummary').textContent=`${filtered.length}/${state.runs.length}`;
   if(!filtered.length){el.innerHTML='<div class="empty-msg">暂无运行</div>';return}
-  el.innerHTML=`<table class="runs-table"><thead><tr><th>编号</th><th>状态</th><th>标题</th></tr></thead><tbody>${filtered.slice(0,12).map(r=>`<tr class="run-row"><td><a href="#" class="link" data-run="${esc(r.id)}">${esc(String(r.id).slice(0,10))}</a></td><td>${statusTag(r.status)}</td><td>${esc(r.title||'—')}</td></tr>`).join('')}</tbody></table>`;
+  el.innerHTML=`<table class="runs-table"><thead><tr><th>编号</th><th>状态</th><th>标题</th><th style="width:48px">总结</th></tr></thead><tbody>${filtered.slice(0,12).map(r=>{
+    const canDiary=['completed','failed'].includes(r.status);
+    const diaryBtn=canDiary?`<button class="diary-trigger" data-diary="${esc(r.id)}" title="查看 Leader 总结">📓</button>`:'<span style="color:var(--ink-3);font-size:11px">—</span>';
+    return`<tr class="run-row"><td><a href="#" class="link" data-run="${esc(r.id)}">${esc(String(r.id).slice(0,10))}</a></td><td>${statusTag(r.status)}</td><td>${esc(r.title||'—')}</td><td>${diaryBtn}</td></tr>`;
+  }).join('')}</tbody></table>`;
   el.querySelectorAll('[data-run]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();showRunDetail(a.dataset.run)}));
+  el.querySelectorAll('[data-diary]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();showDiaryFor(b.dataset.diary)}));
 }
 
 /* ---------- API loop ---------- */
@@ -1157,6 +1313,7 @@ async function refresh(){
   try{
     const overview=await getJSON('/api/overview');setMetrics(overview);
     const runs=await getJSON('/api/runs');state.runs=runs||[];renderRuns();
+    maybeAutoPopDiary();
     const latest=state.runs.find(r=>r.status==='running')||state.runs[0];
     if(latest)await loadRun(latest.id);
     else{state.nodes=[];state.agents=[];state.logs=[];renderNodeList();summarizePipeline();renderLogPanel()}
@@ -1267,6 +1424,155 @@ function formatLogs(logs,flt){
   }).join('\n')||'<span class="empty-msg">无匹配日志</span>';
 }
 
+/* ---------- Leader 反馈日记本 ---------- */
+// 在 state 上挂 diary 元数据，避免反复弹同一 run
+state.diaryShown=state.diaryShown||new Set();
+state.diaryCurrent=null;  // {runId,title,markdown,createdAt}
+
+// 从一个 run 的 detail 中抽出 leader 聚合摘要（如果存在）
+function extractLeaderSummary(detail){
+  if(!detail||!Array.isArray(detail.logs))return null;
+  // 优先找 aggregate worker 的 finished log
+  const log=detail.logs.find(l=>l.node_id==='aggregate'&&l.message==='worker finished');
+  let md=null,ts=null;
+  if(log){
+    let d=log.data;
+    // 后端字段名可能是 data 或 data_json（字符串）
+    if(d==null&&log.data_json!=null)d=log.data_json;
+    if(typeof d==='string'){try{d=JSON.parse(d)}catch(_e){}}
+    if(d&&typeof d==='object'){
+      md=d.result||d.summary||d.text||null;
+      if(d.ok===false&&!md)md='⚠ Leader 聚合阶段失败，无总结输出。';
+    }
+    ts=log.timestamp||log.created_at||null;
+  }
+  // 兜底：如果 nodes 里有 id=aggregate 的节点，读它的 result
+  if(!md&&Array.isArray(detail.nodes)){
+    const agg=detail.nodes.find(n=>n.id==='aggregate');
+    if(agg&&agg.result)md=agg.result;
+  }
+  if(!md)return null;
+  return{markdown:md,createdAt:ts};
+}
+
+// 极简 markdown → HTML（仅常见结构，避免引第三方库）
+function renderMarkdown(md){
+  if(!md)return'<div class="empty">（无内容）</div>';
+  const escapeHtml=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // 提取代码块占位
+  const codeBlocks=[];
+  md=md.replace(/```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g,(_m,lang,code)=>{
+    codeBlocks.push(`<pre><code class="lang-${escapeHtml(lang||'text')}">${escapeHtml(code)}</code></pre>`);
+    return`\u0000CODE${codeBlocks.length-1}\u0000`;
+  });
+  let html=escapeHtml(md);
+  // 还原代码块
+  html=html.replace(/\u0000CODE(\d+)\u0000/g,(_m,i)=>codeBlocks[+i]);
+  // 表格（简易支持 | 分隔，必须有分隔线行）
+  html=html.replace(/(^\|.+\|\n\|[\s\-:|]+\|\n(?:\|.+\|\n?)+)/gm,block=>{
+    const lines=block.trim().split('\n');
+    const head=lines[0].split('|').slice(1,-1).map(s=>s.trim());
+    const rows=lines.slice(2).map(r=>r.split('|').slice(1,-1).map(s=>s.trim()));
+    return'<table><thead><tr>'+head.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>'+
+      rows.map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody></table>';
+  });
+  // 标题
+  html=html.replace(/^###\s+(.+)$/gm,'<h3>$1</h3>');
+  html=html.replace(/^##\s+(.+)$/gm,'<h2>$1</h2>');
+  html=html.replace(/^#\s+(.+)$/gm,'<h1>$1</h1>');
+  // blockquote
+  html=html.replace(/(^&gt;\s+.+(?:\n&gt;\s+.+)*)/gm,m=>'<blockquote>'+m.replace(/^&gt;\s+/gm,'')+'</blockquote>');
+  // 列表
+  html=html.replace(/(?:^[-*]\s+.+(?:\n[-*]\s+.+)*)/gm,m=>'<ul>'+m.split('\n').map(line=>'<li>'+line.replace(/^[-*]\s+/,'')+'</li>').join('')+'</ul>');
+  html=html.replace(/(?:^\d+\.\s+.+(?:\n\d+\.\s+.+)*)/gm,m=>'<ol>'+m.split('\n').map(line=>'<li>'+line.replace(/^\d+\.\s+/,'')+'</li>').join('')+'</ol>');
+  // 行内代码 + 粗体
+  html=html.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  html=html.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+  // 链接
+  html=html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 段落
+  html=html.split(/\n{2,}/).map(p=>{
+    const t=p.trim();
+    if(!t)return'';
+    if(/^<(h\d|ul|ol|table|pre|blockquote)/.test(t))return t;
+    return'<p>'+t.replace(/\n/g,'<br>')+'</p>';
+  }).join('\n');
+  return html;
+}
+
+function openDiary(runId,title,summary){
+  state.diaryCurrent={runId,title:title||runId,markdown:summary.markdown,createdAt:summary.createdAt};
+  $('diaryTitle').textContent=title||runId;
+  $('diaryRunId').textContent=runId;
+  $('diaryTime').textContent=summary.createdAt?String(summary.createdAt).replace('T',' ').slice(0,19):'';
+  $('diaryContent').innerHTML=renderMarkdown(summary.markdown);
+  $('diaryContent').scrollTop=0;
+  $('diaryOverlay').classList.add('show');
+  // 焦点到内容区，方便键盘滚动
+  setTimeout(()=>$('diaryContent').focus(),50);
+  state.diaryShown.add(runId);
+}
+function closeDiary(){$('diaryOverlay').classList.remove('show');state.diaryCurrent=null}
+
+async function showDiaryFor(runId){
+  if(!runId)return;
+  const detail=runId===state.runId?state.run:await getJSON('/api/runs/'+encodeURIComponent(runId));
+  if(!detail){showRunToast&&showRunToast('bad','✗ 找不到该任务');return}
+  const summary=extractLeaderSummary(detail);
+  if(!summary){
+    showRunToast&&showRunToast('bad','该任务尚无 Leader 总结（可能未启用聚合或仍在进行）');
+    return;
+  }
+  openDiary(runId,detail.title||detail.run?.title||runId,summary);
+}
+
+// 自动检测：当某个 run 由非完成态变为 completed/failed，且本会话还没弹过，自动开日记本
+function maybeAutoPopDiary(){
+  const runs=state.runs||[];
+  // 记忆上一次每个 runId 的状态
+  state._prevRunStatus=state._prevRunStatus||{};
+  // 第一次拉到列表时，仅记录现有状态，不弹（避免页面刚加载就把所有历史 run 都弹一遍）
+  const firstSeen=Object.keys(state._prevRunStatus).length===0;
+  for(const r of runs){
+    const prev=state._prevRunStatus[r.id];
+    const cur=r.status;
+    state._prevRunStatus[r.id]=cur;
+    if(firstSeen||!prev)continue;
+    if(prev===cur)continue;
+    if(['completed','failed'].includes(cur)&&!state.diaryShown.has(r.id)){
+      // 异步拉详情拿 leader 摘要
+      showDiaryFor(r.id).catch(()=>{});
+    }
+  }
+}
+
+function wireDiary(){
+  $('diaryCloseBtn').addEventListener('click',closeDiary);
+  $('diaryOverlay').addEventListener('click',e=>{if(e.target.id==='diaryOverlay')closeDiary()});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&$('diaryOverlay').classList.contains('show'))closeDiary();
+  });
+  $('diaryCopyBtn').addEventListener('click',async()=>{
+    if(!state.diaryCurrent)return;
+    try{
+      await navigator.clipboard.writeText(state.diaryCurrent.markdown);
+      const b=$('diaryCopyBtn'),t=b.textContent;b.textContent='✓ 已复制';setTimeout(()=>b.textContent=t,1400);
+    }catch(_e){
+      const b=$('diaryCopyBtn'),t=b.textContent;b.textContent='✗ 复制失败';setTimeout(()=>b.textContent=t,1400);
+    }
+  });
+  $('diaryDownloadBtn').addEventListener('click',()=>{
+    if(!state.diaryCurrent)return;
+    const{runId,markdown,createdAt}=state.diaryCurrent;
+    const ts=(createdAt||new Date().toISOString()).replace(/[:T]/g,'-').slice(0,19);
+    const blob=new Blob(['# Leader 总结 · '+runId+'\n\n生成时间：'+(createdAt||'')+'\n\n---\n\n'+markdown],{type:'text/markdown;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`leader-summary-${runId}-${ts}.md`;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  });
+}
+
 async function showNode(runId,nodeId){
   if(runId!==state.runId)await loadRun(runId);
   const node=state.nodes.find(n=>n.id===nodeId);if(!node)return;
@@ -1370,6 +1676,7 @@ $('closeDetailBtn').addEventListener('click',closeOverlay);
 $('detailOverlay').addEventListener('click',e=>{if(e.target.id==='detailOverlay')closeOverlay()});
 $('runSearch').addEventListener('input',renderRuns);
 wireLogChips();
+wireDiary();
 
 /* ---------- boot ---------- */
 refresh();previewCapabilities();

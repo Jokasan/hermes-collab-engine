@@ -18,6 +18,39 @@ opc
 
 启动后选择配置方式 → 选模型 → 面板自动运行。
 
+## 沙盒演示
+
+仓库内置一套与生产隔离的沙盒，使用脱敏 SQLite + Mock API，**不调用真实 worker、不写生产数据**，适合在本地或演示机上快速展示页面。
+
+```bash
+# 一键启动（默认运行 2 小时，超时自动停止）
+./scripts/start_sandbox.sh
+
+# 自定义运行小时数
+./scripts/start_sandbox.sh 4              # 4 小时
+./scripts/start_sandbox.sh 0.5            # 30 分钟
+./scripts/start_sandbox.sh --hours 8      # 8 小时
+./scripts/start_sandbox.sh --port 8877    # 换端口
+./scripts/start_sandbox.sh -i             # 交互式询问时长
+
+# 复用已有数据库，不重新播种
+./scripts/start_sandbox.sh --no-reseed
+```
+
+启动后访问：`http://127.0.0.1:8876/`
+
+详见：[`sandbox/README.md`](sandbox/README.md)
+
+## Leader 总结日记本
+
+任何任务跑完（completed/failed）后，仪表盘会自动弹出一个**像素本子**形式的日记本，把 Leader 的最终聚合反馈完整打印出来：
+
+- 完成时自动弹出（同一会话不重复弹）
+- 历史记录表格里点 📓 按钮可重新打开任意 run 的总结
+- 内置滚动条，长篇报告也能完整阅读
+- 一键复制 / 下载为 Markdown
+- 按 ESC 或点击空白处关闭
+
 ## 核心概念
 
 ```
