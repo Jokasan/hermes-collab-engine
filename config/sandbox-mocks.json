@@ -1,0 +1,100 @@
+{
+  "mode": "sandbox-demo",
+  "description": "Local-only mock/stub dependencies for loading cloned pages without production access.",
+  "egress_policy": {
+    "default": "deny",
+    "allow_hosts": [
+      "127.0.0.1",
+      "localhost"
+    ]
+  },
+  "database": {
+    "driver": "sqlite",
+    "seed_command": "python3 scripts/seed_demo_data.py --db data/demo_sandbox.sqlite3 --reset",
+    "dashboard_command": "PYTHONPATH=src python3 -m hermes_collab_engine.cli server --host 127.0.0.1 --port 8765 --db data/demo_sandbox.sqlite3 --cwd ."
+  },
+  "services": [
+    {
+      "name": "auth",
+      "kind": "stub",
+      "base_url": "http://127.0.0.1:8870/auth",
+      "replaces": "production identity provider",
+      "responses": {
+        "GET /session": {
+          "status": 200,
+          "json": {
+            "user": {
+              "id": "demo-user-001",
+              "name": "Demo Operator",
+              "roles": ["sandbox-admin"]
+            },
+            "token": "demo-token-not-for-production"
+          }
+        }
+      },
+      "security_notes": [
+        "No real credentials are accepted or stored.",
+        "Token is static fixture text for UI demos only."
+      ]
+    },
+    {
+      "name": "notify-gateway",
+      "kind": "mock",
+      "base_url": "http://127.0.0.1:8871/notify",
+      "replaces": "production notification, IM, and email delivery",
+      "responses": {
+        "POST /messages": {
+          "status": 202,
+          "json": {
+            "accepted": true,
+            "message_id": "mock-msg-0001",
+            "delivery": "suppressed"
+          }
+        }
+      },
+      "security_notes": [
+        "Never sends outbound messages.",
+        "Payloads may be logged locally for demo troubleshooting only."
+      ]
+    },
+    {
+      "name": "agent-registry",
+      "kind": "fixture",
+      "base_url": "http://127.0.0.1:8765/api/agents",
+      "replaces": "runtime discovery of production worker pools",
+      "responses": {
+        "GET /agents": {
+          "status": 200,
+          "json": [
+            {
+              "name": "claude-code",
+              "display_name": "Claude Code",
+              "available": true,
+              "scope": "sandbox"
+            },
+            {
+              "name": "mock-agent",
+              "display_name": "Mock Agent",
+              "available": true,
+              "scope": "sandbox"
+            }
+          ]
+        }
+      },
+      "security_notes": [
+        "Production worker credentials and fleet endpoints are not referenced.",
+        "Dashboard may also use the built-in /api/agents endpoint backed by local PATH detection."
+      ]
+    }
+  ],
+  "demo_paths_covered": [
+    "overview metrics",
+    "running run detail",
+    "completed run detail",
+    "failed dependency example",
+    "worker pool cards",
+    "recent logs with info/warning levels",
+    "lessons list",
+    "skill/tool preview payloads"
+  ]
+}
