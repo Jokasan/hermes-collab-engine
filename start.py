@@ -18,6 +18,17 @@ GITHUB_URL = 'https://github.com/lpc0387/hermes-collab-engine'
 TAGLINE_ZH = '多 Agent 协同引擎 · Leader 拆解 · Worker 并行 · 面板可视化'
 TAGLINE_EN = 'Multi-agent collab engine · Leader plans · Workers run in parallel · Live dashboard'
 
+# Agent config files this launcher reads/writes. Must share the same parent
+# directory as the project root (path-consistency invariant).
+AGENT_CONFIG_DIRS = [HERMES_DIR, CLAUDE_DIR]
+AGENT_CONFIG_FILES = [
+    HERMES_DIR / '.env',
+    HERMES_DIR / 'config.yaml',
+    HERMES_DIR / 'auth.json',
+    CLAUDE_DIR / 'settings.json',
+]
+RUNTIME_CONFIG_PATH = ROOT / '.runtime-config.json'
+
 
 def _supports_color() -> bool:
     if os.environ.get('NO_COLOR'):
@@ -269,6 +280,132 @@ def prompt(text, default=''):
     return raw or default
 
 
+# ── Path consistency & previous-runtime loading ────────────────────────
+
+def enforce_path_consistency() -> None:
+    """Verify agent config dirs share the project's parent directory.
+
+    The launcher reads/writes config from ~/.hermes/ and ~/.claude/. We require
+    those directories (and the project root) to live under a common parent so
+    deployments stay self-contained — e.g. all of /root/hermes-collab-engine,
+    /root/.hermes, /root/.claude under /root. If a dir exists but lives
+    elsewhere, abort instead of silently reading the "wrong" config.
+    """
+    project_parent = ROOT.parent.resolve()
+
+    print('检查 agent 配置路径一致性...')
+    print(f'  项目根目录: {ROOT}')
+    print(f'  期望共同父路径: {project_parent}')
+    print('  将读取以下 agent 配置文件（如存在）：')
+    for f in AGENT_CONFIG_FILES:
+        print(f'    - {f}')
+
+    errors = []
+    for d in AGENT_CONFIG_DIRS:
+        if not d.exists():
+            # Missing dirs are fine — caller decides whether they were needed.
+            continue
+        try:
+            real = d.resolve()
+        except OSError as e:
+            errors.append(f'无法解析 {d}: {e}')
+            continue
+        # Walk up parents looking for the shared parent.
+        if project_parent not in real.parents and real != project_parent:
+            errors.append(
+                f'{d} 解析为 {real}，与项目父目录 {project_parent} '
+                f'不在同一路径树下'
+            )
+
+    if errors:
+        print()
+        print('✗ 路径一致性检查失败（agent 配置目录与项目不在同一父路径下）：')
+        for e in errors:
+            print(f'  - {e}')
+        print()
+        print('请将 agent 配置目录放到与本项目相同的父目录下，或调整项目位置后重试。')
+        raise SystemExit(2)
+
+    print('  ✓ 路径一致性 OK')
+    print()
+
+
+def load_previous_runtime() -> dict:
+    """Load the most recent .runtime-config.json so empty answers can keep prior values."""
+    if not RUNTIME_CONFIG_PATH.exists():
+        return {}
+    try:
+        return json.loads(RUNTIME_CONFIG_PATH.read_text(encoding='utf-8'))
+    except Exception as e:
+        print(f'⚠ 无法读取上次的 runtime 配置（{RUNTIME_CONFIG_PATH}）：{e}')
+        print('  将视为首次启动。')
+        return {}
+
+
+def _typing_animation(label: str, dots: int = 4, interval: float = 0.25) -> None:
+    """Print '<label>。' progressively to convey 'filling in...' feedback."""
+    sys = __import__('sys')
+    sys.stdout.write(label)
+    sys.stdout.flush()
+    for _ in range(dots):
+        time.sleep(interval)
+        sys.stdout.write('。')
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    sys.stdout.flush()
+
+
+def _mask(token: str) -> str:
+    if not token:
+        return '(空)'
+    if len(token) <= 8:
+        return '*' * len(token)
+    return f'{token[:4]}...{token[-4:]}'
+
+
+def ask_agent_config(role_label: str, prev: dict) -> dict:
+    """Prompt for one agent's base_url / api_key / model. Empty -> keep prev value.
+
+    `prev` is the previously persisted dict for this role (may be empty). If a
+    field has no previous value AND the user leaves it blank, abort.
+    """
+    print(f'── 配置 {role_label} ──')
+    if prev:
+        print(f'  上次值：base_url={prev.get("base_url") or "(无)"}'
+              f'  api_key={_mask(prev.get("api_key", ""))}'
+              f'  model={prev.get("model") or "(无)"}')
+        print('  留空则沿用上次配置；任意一项首次启动且留空将报错退出。')
+    else:
+        print('  首次配置，三项均为必填。')
+
+    fields = [
+        ('base_url', f'{role_label} BaseURL'),
+        ('api_key',  f'{role_label} API Key / Auth Token'),
+        ('model',    f'{role_label} 模型名称'),
+    ]
+    out = {}
+    for key, label in fields:
+        prev_val = prev.get(key, '') if prev else ''
+        hint = _mask(prev_val) if key == 'api_key' and prev_val else (prev_val or '')
+        suffix = f' [留空保留上次值: {hint}]' if hint else ''
+        raw = input(f'  {label}{suffix}: ').strip()
+        if not raw:
+            if not prev_val:
+                print(f'  ✗ {label} 为空且无历史值，无法启动。')
+                raise SystemExit(2)
+            print(f'  · {label} 留空 → 沿用上次值')
+            out[key] = prev_val
+        else:
+            out[key] = raw
+
+    print()
+    _typing_animation(f'  正在填入 {role_label} 配置')
+    print(f'  ✓ {role_label}: {out["base_url"]}  |  '
+          f'key={_mask(out["api_key"])}  |  model={out["model"]}')
+    print()
+    return out
+
+
 def choose_interaction_mode():
     choice = choose(
         '选择操作方式',
@@ -354,76 +491,87 @@ def stop_existing_server():
 def main():
     print_banner()
 
-    # Build config source options dynamically
-    hermes_auto = get_config_from_hermes()
-    claude_profiles = collect_claude_profiles()
-    has_claude = len(claude_profiles) > 0
+    # 1. Path-consistency invariant — agent config dirs must live alongside the
+    #    project. Fails fast and exits if the user's environment is misaligned.
+    enforce_path_consistency()
 
-    options = []
-    if hermes_auto:
-        options.append(f'自动读取 Hermes 配置（{hermes_auto["source"]}）')
-    if has_claude:
-        options.append('读取 Claude Code 配置文件')
-    options.append('手动填写 BaseURL、API Key 和模型名称')
+    # 2. Load the previous runtime so each field can fall back to its prior value.
+    prev_runtime = load_previous_runtime()
+    prev_leader = prev_runtime.get('leader', {})
+    prev_worker = prev_runtime.get('worker', {})
 
-    mode = choose('API 配置方式', options, 1)
+    # Backfill from older flat-format runtime files (pre-v4.6) so first-run
+    # after upgrade still gets useful "previous values".
+    if not prev_leader and prev_runtime.get('base_url'):
+        prev_leader = {
+            'base_url': prev_runtime.get('base_url', ''),
+            'api_key':  prev_runtime.get('api_key', ''),
+            'model':    prev_runtime.get('leader_model', ''),
+        }
+    if not prev_worker and prev_runtime.get('base_url'):
+        prev_worker = {
+            'base_url': prev_runtime.get('base_url', ''),
+            'api_key':  prev_runtime.get('api_key', ''),
+            'model':    prev_runtime.get('worker_model', ''),
+        }
 
-    cfg = None
-    if hermes_auto and mode.startswith('自动读取 Hermes'):
-        cfg = hermes_auto
-        print(f'已从 Hermes 配置加载：{cfg["source"]}')
-        print(f'  BaseURL: {cfg["base_url"]}')
-        print(f'  模型: {", ".join(cfg["models"][:5])}{"..." if len(cfg["models"]) > 5 else ""}')
-    elif has_claude and mode.startswith('读取 Claude'):
-        cfg = get_config_from_claude()
-    else:
-        cfg = get_config_manual()
+    # 3. Two rounds of prompts — Leader first, then Worker.
+    leader = ask_agent_config('Leader Agent（规划/聚合大脑）', prev_leader)
+    worker = ask_agent_config('Worker Agent（执行器大脑）',  prev_worker)
 
-    if cfg is None:
-        print('自动读取失败，切换为手动填写。')
-        cfg = get_config_manual()
-
-    models = cfg['models']
-    default_leader = models.index(cfg['default_leader']) + 1 if cfg.get('default_leader') in models else 1
-    default_worker = models.index(cfg['default_worker']) + 1 if cfg.get('default_worker') in models else min(2, len(models))
-
-    leader_model = choose('选择 Leader Agent（Hermes 命令行 / 规划与聚合大脑）模型', models, default_leader)
-    worker_model = choose('Worker Agent（执行器大脑）模型', models, default_worker)
-
-    host = prompt('\n管理面板监听地址', '0.0.0.0')
-    port = prompt('管理面板监听端口', '8765')
-    cwd = prompt('协同任务默认工作目录', str(Path.home()))
+    host = prompt('管理面板监听地址', prev_runtime.get('host') or '0.0.0.0')
+    port = prompt('管理面板监听端口', str(prev_runtime.get('port') or '8765'))
+    cwd  = prompt('协同任务默认工作目录', prev_runtime.get('cwd') or str(Path.home()))
 
     runtime = {
-        'config_source': cfg['source'],
-        'config_source_path': cfg['source_path'],
-        'base_url': cfg['base_url'],
-        'leader_model': leader_model,
-        'worker_model': worker_model,
+        'config_source': 'manual (leader/worker independent)',
+        'leader': leader,
+        'worker': worker,
+        # Legacy mirrors so other tooling reading the old keys keeps working.
+        'base_url':     leader['base_url'],
+        'leader_model': leader['model'],
+        'worker_model': worker['model'],
         'host': host,
         'port': int(port),
         'cwd': cwd,
     }
-    (ROOT / '.runtime-config.json').write_text(
+    RUNTIME_CONFIG_PATH.write_text(
         json.dumps(runtime, ensure_ascii=False, indent=2), encoding='utf-8')
+    try:
+        os.chmod(RUNTIME_CONFIG_PATH, 0o600)  # contains api_keys
+    except OSError:
+        pass
 
+    # Build subprocess env. Leader values drive the env vars (Hermes CLI inherits
+    # these); worker values are passed via HERMES_COLLAB_WORKER_* and CLI flags so
+    # the engine can split leader/worker traffic onto different keys/base_urls.
     run_env = os.environ.copy()
-    run_env['ANTHROPIC_AUTH_TOKEN'] = cfg['token']
-    run_env['ANTHROPIC_API_KEY'] = cfg['token']
-    run_env['ANTHROPIC_BASE_URL'] = cfg['base_url']
-    run_env['ANTHROPIC_MODEL'] = leader_model
-    run_env['HERMES_COLLAB_LEADER_MODEL'] = leader_model
-    run_env['HERMES_COLLAB_WORKER_MODEL'] = worker_model
+    run_env['ANTHROPIC_AUTH_TOKEN'] = leader['api_key']
+    run_env['ANTHROPIC_API_KEY']    = leader['api_key']
+    run_env['ANTHROPIC_BASE_URL']   = leader['base_url']
+    run_env['ANTHROPIC_MODEL']      = leader['model']
+    run_env['HERMES_COLLAB_LEADER_MODEL']    = leader['model']
+    run_env['HERMES_COLLAB_LEADER_BASE_URL'] = leader['base_url']
+    run_env['HERMES_COLLAB_LEADER_API_KEY']  = leader['api_key']
+    run_env['HERMES_COLLAB_WORKER_MODEL']    = worker['model']
+    run_env['HERMES_COLLAB_WORKER_BASE_URL'] = worker['base_url']
+    run_env['HERMES_COLLAB_WORKER_API_KEY']  = worker['api_key']
 
     server_cmd = [
         str(ROOT / 'hermes-collab'), 'server', '--host', host, '--port', str(port),
         '--cwd', cwd, '--db', str(ROOT / 'data' / 'collab.sqlite3'),
-        '--leader-model', leader_model, '--worker-model', worker_model,
+        '--leader-model', leader['model'], '--worker-model', worker['model'],
     ]
 
-    print('\n启动配置：')
-    safe_runtime = {k: v for k, v in runtime.items() if k != 'token'}
+    # Print summary (mask api keys).
+    print('启动配置：')
+    safe_runtime = json.loads(json.dumps(runtime, ensure_ascii=False))
+    for role in ('leader', 'worker'):
+        if isinstance(safe_runtime.get(role), dict) and 'api_key' in safe_runtime[role]:
+            safe_runtime[role]['api_key'] = _mask(safe_runtime[role]['api_key'])
     print(json.dumps(safe_runtime, ensure_ascii=False, indent=2))
+
+    leader_model = leader['model']  # alias used below
 
     print('\n正在启动协同引擎管理面板...')
     stop_existing_server()
