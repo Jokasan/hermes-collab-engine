@@ -1,475 +1,228 @@
-# Hermes Collab Engine
+# Hermes Collab Engine v4.5
 
-<p align="center">
-  <a href="README.md">简体中文</a> |
-  <a href="README.en.md">English</a> |
-  <a href="README.ja.md">日本語</a>
-</p>
+Multi-Agent Collaboration Engine: A Leader decomposes tasks, Workers execute in parallel, and a dashboard provides real-time visualization.
 
-> A multi-Agent collaborative execution engine: automatically assesses task complexity, decomposes via WBS, dispatches across multiple executors in parallel, supports various Workers including Claude Code / Codex / OpenCode, automatically splits and retries on timeout, persists via SQLite, distributes Skills, manages MCP tools, and provides a visual Chinese management panel.
-
-[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](#environment-requirements)
-[![SQLite](https://img.shields.io/badge/SQLite-Persistence-green)](#persistence)
-[![Hermes](https://img.shields.io/badge/Hermes-Agent-purple)](#execution-pipeline)
-[![Multi-Agent](https://img.shields.io/badge/Worker-Claude%20Code%20%7C%20Codex%20%7C%20OpenCode-orange)](#agent-backend)
-
-## One-Click Deployment
+## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lpc0387/hermes-collab-engine/main/scripts/install.sh | bash
-```
+# Clone
+git clone https://github.com/lpc0387/hermes-collab-engine.git
+cd hermes-collab-engine
+pip install -e .
 
-After deployment, start with:
-
-```bash
+# Launch
 opc
 ```
 
-`opc` will guide you through:
+After launching, choose a configuration method → select a model → the dashboard starts automatically.
 
-1. Choosing to auto-read local Claude/Hermes configuration, or manually entering BaseURL, API Key, and model list;
-2. Selecting the Leader Agent model;
-3. Selecting the Worker Agent model;
-4. Selecting the Worker Agent type (Claude Code / Codex / OpenCode / Custom);
-5. Selecting the management panel listen address, port, and default working directory;
-6. Starting the collaborative engine management panel;
-7. Choosing the interaction mode: use the task input window in the Web panel, or enter the official Hermes command line.
+## Core Concepts
 
-After exiting the chosen interaction mode, `opc` will stop the management panel service started in this session. The Web panel is recommended by default since it has a built-in task input window; choose the Hermes command line when terminal interaction is needed.
-
-## What Problem Does It Solve
-
-A single Agent handling large tasks often encounters:
-
-- Unclear task boundaries, unable to determine whether decomposition is needed;
-- All work executed serially, resulting in low efficiency;
-- No checkpoint or retry strategy for long-running tasks after timeout;
-- Status of multiple Workers is not visible;
-- Execution history, failure reasons, and experience cannot be accumulated;
-- No unified panel to view logs, running status, and task graph;
-- Different coding Agents cannot be scheduled uniformly;
-- Workers lack domain skills and tool guidance.
-
-Hermes Collab Engine separates task execution into a "planning layer" and an "execution layer":
-
-- **Leader Agent** is responsible for complexity assessment, WBS decomposition, Skill distribution, tool allocation, and result aggregation;
-- **Worker Agent** is responsible for executing specific WBS nodes, loading Skills and MCP tools as needed;
-- **Agent Backend** abstracts the invocation and output parsing of different coding Agents;
-- **SQLite** records running status, nodes, executors, logs, context snapshots, and learned experience;
-- **Management Panel** provides real-time visualization of running status and collaborative workflows.
-
-## Execution Pipeline
-
-```text
-User
-  ↓
-Hermes Parent Agent
-  ├─ Optional: delegate_task pre-analysis
-  ↓ terminal tool
-Hermes Collab Engine
-  ├─ Leader: Complexity Scoring / WBS / Skill Distribution / Tool Allocation / Proactive Splitting
-  ├─ Scheduler: Streaming Dispatch / Intervention Control
-  ├─ Agent Backend: Claude Code / Codex / OpenCode / Custom
-  ├─ Skill Registry: Inject Worker prompts by node type
-  ├─ MCP Tool Manager: Recommend tools for Workers based on tool characteristics
-  ├─ SQLite: Runs / Nodes / Logs / Snapshots / scoped lessons
-  └─ Watchdog: Timeout Splitting
-      ↓
-Worker Agent 1..N (can mix different Agent types)
-  ↓ Dual-track output (machine result + human deliverable)
-Aggregated Results
-  ↓
-Return to User
+```
+User → Leader(AI) → WBS Decomposition → Worker(AI) × N in parallel → Aggregation → Result
 ```
 
-## Agent Backend
+- **Leader** handles complexity scoring, WBS decomposition, result aggregation, and Skill/Tool distribution
+- **Worker** executes individual nodes, loading Skills and tool whitelists on demand
+- **Agent Backend** abstracts different coding agents (Claude Code / Codex / OpenCode)
+- **SQLite** persists runtime state, node results, context snapshots, and lessons learned
+- **Dashboard** provides real-time visualization of the pipeline, Worker pool, and Skill/Tool injection
 
-v4.0 introduces a pluggable Agent Backend system, replacing hardcoded Worker invocations. Each Backend defines how to invoke and parse the output of a specific coding Agent.
+## What's New in v4.5
 
-### Built-in Backends
+| Feature | Description |
+|---|---|
+| Skill Distribution | The Leader automatically selects skills to inject into Worker prompts based on node capabilities, with a top-3 limit |
+| MCP Tool Management | The Leader assigns tool whitelists by node type, including MCP read-only tools, following the principle of least privilege |
+| Visualization Dashboard | Pipeline view + Worker pool cards + Skill/Tool badges, dark theme |
 
-| Backend | Command | Output Parsing | Use Case |
-|---|---|---|---|
-| `claude-code` | `claude` | JSON envelope | General coding (default) |
-| `codex` | `codex` | JSON envelope | OpenAI Codex coding |
-| `opencode` | `opencode` | Plain text | Lightweight coding |
-
-### Selecting Worker Agent
-
-```bash
-# Default Claude Code
-hermes-collab run "task"
-
-# Using Codex
-hermes-collab run "task" --agent codex
-
-# View available Agents
-hermes-collab agents
-hermes-collab agents --available
-```
-
-### Custom Agent
-
-```python
-from hermes_collab_engine.agents import register_backend, AgentBackend
-
-register_backend(AgentBackend(
-    name="my-agent",
-    display_name="My Custom Agent",
-    command=["my-agent-cli"],
-    prompt_flag="--prompt",
-    output_parser="raw_text",
-    ...
-))
-```
-
-### API
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/agents` | List available Agent Backends |
-
-## Core Capabilities
+## Full Capabilities
 
 | Capability | Description |
 |---|---|
-| Complexity Assessment | Calculates task complexity based on domain, number of steps, ambiguity, coupling, and risk |
-| WBS Decomposition | Automatically decomposes complex tasks into executable work breakdown nodes |
-| Agent Backend | Pluggable Worker Agents: Claude Code / Codex / OpenCode / Custom |
-| Parallel Dispatch | Nodes with satisfied dependencies are dispatched in parallel to the selected Agent |
-| Timeout Watchdog | Workers that time out automatically enter a splitting and retry process |
-| Shard Retry | Timed-out nodes are split into focused shards: scope, evidence, implementation, and risk |
-| Result Aggregation | Aggregates parent task and shard results, honestly reporting success, failure, and timeout |
-| SQLite Persistence | Uses a real SQLite file to save run history, node results, and context snapshots |
-| Context Snapshots | Automatically saves context before node completion and compaction, supporting post-compaction focus recovery |
-| Self-Learning Experience | Accumulates experience from timeouts, slow tasks, and failures for use in subsequent planning |
-| Management Panel | Chinese Web panel displaying run records, logs, executors, and experience |
-| Leader-Driven Scoring | Leader Agent handles complexity scoring, determining execution strategy by domain, steps, ambiguity, coupling, and risk |
-| Semantic Compression & Decomposition | Planner outputs a shared brief and node briefs, compressing large tasks into the minimal context Workers need to execute |
-| Dual-Track Output | Workers simultaneously produce machine-parseable results and human-readable deliverables for scheduling, panel display, and final reporting |
-| Tiered Upstream Context | Worker prompts automatically include parent, grandparent, and completed dependency results, maintaining traceable shard lineage |
-| Streaming Dispatch | The scheduler dispatches nodes as soon as dependencies are satisfied and slots are available, avoiding fixed-batch barriers that slow downstream pipelines |
-| Proactive Splitting | Nodes expected to time out or carry high risk can be split into focused shards before execution, rather than waiting for timeout remediation |
-| Parent Intervention | Parent / Operator can log, kill, split, or skip running nodes via CLI, with all actions recorded in the audit log |
-| Experience Scoping | Lessons carry global, project, run, node, or wbs-family scope, preventing local experience from polluting global planning |
-| Environment Variable Models | CLI supports HERMES_COLLAB_MODEL, HERMES_COLLAB_LEADER_MODEL, HERMES_COLLAB_WORKER_MODEL, and ANTHROPIC_MODEL as model fallbacks |
+| Complexity Assessment | Scores by domain, number of steps, ambiguity, coupling, and risk |
+| WBS Decomposition | Automatically breaks tasks into executable work-breakdown nodes |
+| Agent Backend | Claude Code / Codex / OpenCode / Custom |
+| Skill Distribution | Selects skills to inject into prompts based on node capabilities |
+| MCP Tool Management | Tool whitelists + MCP read-only + fallback |
+| Parallel Dispatch | Dispatches as soon as dependencies are satisfied, streaming scheduling |
+| Timeout Guard + Shard Retry | Timeouts are split into scope/evidence/implementation/risk shards |
+| Result Aggregation | Honestly reports successes, failures, and timeouts |
+| Dual-Track Output | Machine-parseable JSON + human-readable deliverables |
+| Context Snapshots | Automatically saved before compression, supports restoration |
+| Self-Learning Lessons | Scoped lessons (global / project / run / node) |
+| Parent Intervention | CLI can kill / split / skip running nodes |
+| Visualization Dashboard | Pipeline + Worker pool + Skill/Tool badges |
+| Environment Variable Models | `HERMES_COLLAB_MODEL` / `ANTHROPIC_MODEL` fallback |
 
-## Self-Upgrade Synchronization Policy
+## Configuration Sources
 
-Stable rule changes to the AI / collaborative engine must be synced to GitHub as backup and migration capability; commits follow an allowlist minimum-commit strategy, and submitting keys, profiles, settings, run databases, logs, or session records is prohibited. See [AI / Collaborative Engine Self-Upgrade Synchronization Policy](docs/self-upgrade-policy.md).
+The launcher auto-detects API configuration in the following priority order:
 
-## Environment Requirements
+1. **`~/.hermes/.env`** — `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL` (recommended)
+2. **`~/.hermes/config.yaml`** — `model.base_url` + `model.default`
+3. **`~/.hermes/auth.json`** — Anthropic credentials from the credential pool
+4. **`~/.claude/settings.json`** — Claude Code configuration (fallback)
+5. **Manual Input** — BaseURL + API Key + model list
 
-- Linux / macOS / WSL
-- Python 3.11+
-- Git
-- At least one Worker Agent: Claude Code CLI (`claude`), Codex CLI (`codex`), or OpenCode (`opencode`)
-- Official Hermes Agent: `hermes`
-
-No Node.js dependencies required, no npm install needed.
-
-## Launcher
-
-```bash
-opc
-```
-
-The launcher supports two API configuration methods:
-
-### Auto-Read Local Configuration
-
-Reads from:
-
-```text
-~/.claude/settings.json
-~/.claude/profiles/*.json
-```
-
-Suitable for servers already configured with Claude Code / Hermes.
-
-### Manual Configuration Entry
-
-Prompts for:
-
-- BaseURL
-- API Key / Auth Token
-- Available model list, with multiple models separated by commas
-
-Suitable for new servers or scenarios where you prefer not to read local configuration.
+Hermes acts as the Leader, so its configuration should be the primary source. Claude Code configuration is only used as a compatibility fallback.
 
 ## Model Selection
 
-During startup, you select separately:
+At startup, you select separately:
 
-### Leader Agent Model
+- **Leader Model**: complexity assessment, WBS decomposition, result aggregation, Hermes CLI default model
+- **Worker Model**: node execution, shard retry
 
-Used for:
+## CLI Commands
 
-- Complexity assessment;
-- WBS decomposition;
-- Result aggregation;
-- Serving as the default model for Hermes when entering the Hermes command line.
-
-### Worker Agent Model
-
-Used for:
-
-- Worker Agent execution;
-- WBS node processing;
-- Shard retry after timeout.
-
-## Command Line Usage
-
-### Run a Single Task
+### Run a Task
 
 ```bash
-hermes-collab run "Analyze the current project structure and provide improvement suggestions" --cwd . --json
+hermes-collab run "Analyze the current project structure" --cwd . --json
+hermes-collab run --request-file request.md --cwd .
+hermes-collab run "Implement a collaborative task" --agent claude-code --concurrency 4 --timeout 900
 ```
 
-### Specify Concurrency and Timeout Strategy
+### Start the Dashboard
 
 ```bash
-hermes-collab run "Implement a collaborative task" \
-  --cwd . \
-  --agent claude-code \
-  --concurrency 4 \
-  --timeout 900 \
-  --max-retries 2 \
-  --split-count 4 \
-  --json
+hermes-collab server --host 0.0.0.0 --port 8765 --cwd .
 ```
 
-### Use a Task File
+### View Skills / Tools
 
 ```bash
-hermes-collab run --request-file request.md --cwd . --json
+hermes-collab skills                                # All skills
+hermes-collab skills --node-type implementation      # Preview selected skills
+hermes-collab tools                                 # All tool configurations
+hermes-collab tools --node-type implementation       # Preview selected tools
 ```
 
-### Start the Management Panel
+### View Agents / Status
 
 ```bash
-hermes-collab server --host 0.0.0.0 --port 8765 --cwd . --agent claude-code
-```
-
-Access at:
-
-```text
-http://server-ip:8765
-```
-
-### View Agent Backends
-
-```bash
-hermes-collab agents                # All registered
-hermes-collab agents --available    # Only those available on PATH
-hermes-collab agents --available --json
-```
-
-### View Status
-
-```bash
+hermes-collab agents                # Registered backends
+hermes-collab agents --available    # Available on PATH
 hermes-collab status --json
 ```
 
-### Manage Experience
-
-Write scoped experience:
+### Lesson Management
 
 ```bash
-hermes-collab lesson add \
-  --scope project \
-  --category planning \
-  --lesson "For similar tasks, prioritize splitting into analysis, implementation, and verification phases" \
-  --source hermes-delegate-task \
-  --evidence-json '{"run_id":"run_xxx"}'
+hermes-collab lessons                       # List lessons
+hermes-collab lessons --scope global        # Filter by scope
+hermes-collab add-lesson --category timeout --lesson "Split large files" --scope global
 ```
 
-View experience:
+### Runtime Interventions
 
 ```bash
-hermes-collab lesson list --scope project --json
+hermes-collab kill-node <run_id> <node_id>  # Kill a node
+hermes-collab split-node <run_id> <node_id> # Split a node
+hermes-collab skip-node <run_id> <node_id>  # Skip a node
+hermes-collab redo-node <run_id> <node_id>  # Redo a node
+hermes-collab log <run_id> <node_id> "msg"  # Write a log entry
 ```
 
-Supported scopes: `global`, `project`, `run`, `node`, `wbs-family`.
-
-### Context Snapshots
-
-Manually save before compacting context:
+### Verification
 
 ```bash
-hermes-collab save-snapshot <run_id> \
-  --type pre_compaction \
-  --decisions '["chose X over Y"]' \
-  --user-instructions '["prefer concise responses"]'
+hermes-collab verify-v45    # v4.5 feature completeness check
 ```
-
-View snapshots:
-
-```bash
-hermes-collab context-snapshot <run_id> --latest
-hermes-collab context-snapshot <run_id> --type pre_compaction
-```
-
-### In-Run Intervention
-
-Parent / Operator can perform controlled interventions on running nodes via CLI:
-
-```bash
-hermes-collab parent-log --run-id run_xxx --message "Manual confirmation to continue execution" --json
-hermes-collab split-node --node-id wbs-1 --split-count 4 --reason "Scope too large, proactive split" --json
-hermes-collab skip-node --node-id wbs-2 --reason "Upstream confirmed no need to execute" --json
-hermes-collab kill-node --node-id wbs-3 --signal TERM --reason "Wrong execution direction, stop retry" --json
-```
-
-All interventions are logged, and the final report must disclose any manual intervention, skip, cancellation, or forced advancement.
-
-## Management Panel
-
-The management panel provides:
-
-- Total run count;
-- Number of currently running tasks;
-- Number of active executors;
-- Number of learned experience entries;
-- Run records list;
-- Run details;
-- Real-time logs;
-- Self-learning experience;
-- Online task submission;
-- SSE real-time updates.
 
 ## API
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/overview` | Overview metrics |
+| GET | `/api/overview` | Overview data |
 | GET | `/api/runs` | Run records |
-| GET | `/api/runs/:id` | Single run details |
+| GET | `/api/runs/:id` | Run details (including nodes, workers, logs) |
 | GET | `/api/logs` | Recent logs |
-| GET | `/api/lessons` | Self-learning experience |
+| GET | `/api/lessons` | Self-learning lessons |
 | GET | `/api/agents` | Available Agent Backends |
-| GET | `/api/events` | Real-time event stream |
-| POST | `/api/runs` | Submit task asynchronously |
+| GET | `/api/skills?node_type=&task=` | Skill registry (preview with selection) |
+| GET | `/api/tools?node_type=&task=` | Tool configuration (preview with selection) |
+| GET | `/api/events` | SSE real-time event stream |
+| POST | `/api/runs` | Submit a task asynchronously |
 
 ## Persistence
 
-Default database:
+An SQLite file (default: `data/collab.sqlite3`) stores:
 
-```text
-data/collab.sqlite3
-```
-
-Data tables:
-
-| Table | Purpose |
-|---|---|
-| `runs` | Top-level task run records (including agent type) |
-| `wbs_nodes` | WBS nodes, dependencies, status, results, and context |
-| `workers` | Executor lifecycle, session IDs, duration, and errors |
-| `logs` | Structured logs |
-| `lessons` | Self-learning experience (with scope) |
-| `metrics` | Extended metrics |
-| `node_results` | Worker result text and structured output |
-| `run_state` | Runtime pause and checkpoint state |
-| `context_snapshots` | Context snapshots (resilient to compaction/restarts) |
-
-`lessons` have explicit scoping: `global` and `project` can be reused by subsequent planning; `run`, `node`, and `wbs-family` apply only to the corresponding run, node, or same WBS family, preventing local experience from being misapplied as global rules.
+- `runs` — Run records (including agent field)
+- `wbs_nodes` — Nodes (including skills_json, tools_json)
+- `workers` — Executor state
+- `logs` — Audit logs
+- `lessons` — Lessons learned (including scope)
+- `node_results` — Structured results
+- `settings` — Engine configuration
+- `context_snapshots` — Context snapshots
 
 ## Timeout Splitting Strategy
 
-Default parameters:
+1. Worker timeout → automatically split into scope / evidence / implementation / risk shards
+2. Shards execute independently; results are aggregated back to the parent node
+3. Proactive splitting: nodes predicted to timeout or be high-risk can be split before execution
+4. `redo-node` can redo a completed node; `--cascade` propagates changes downstream
 
-```text
---timeout 900
---max-retries 2
---split-count 4
-```
+## Agent Backend
 
-When a Worker times out, the system does not directly terminate the task. Instead, it splits the node into smaller shards:
+| Backend | Command | Output Parsing |
+|---|---|---|
+| claude-code | `claude -p` | session ID + text |
+| codex | `codex` | JSON |
+| opencode | `opencode` | text |
 
-| Shard | Objective |
-|---|---|
-| Scope Shard | Find the minimal relevant scope and entry point |
-| Evidence Shard | Collect files, commands, symbols, and evidence |
-| Implementation Shard | Produce the minimal implementation or patch strategy |
-| Risk Shard | Identify blockers, unknowns, and verification needs |
-
-Shards are redispatched to Workers and finally aggregated together.
-
-## Agent Communication Protocol
-
-This project uses ACP-Collab v0.3 to define the communication boundaries between the Hermes parent Agent, the collaborative engine Leader, Workers, and the external pre-analysis layer. The full protocol is documented in [Agent Communication Protocol](docs/agent-communication-protocol.md).
-
-Core conventions:
-
-- Request Channel: Parent submits self-contained requests via CLI/API; Workers do not assume access to the parent session history;
-- Dual-Track Result Channel: Worker output includes both machine-parseable results and human-readable deliverables;
-- Upstream-Context Channel: Engine injects parent, grandparent, and completed dependency results into downstream Workers;
-- Scoped Lessons Channel: Experience must carry source and scope; Planner only reuses experience within applicable scope;
-- Dispatch-Control Channel: Streaming dispatch, proactive splitting, and in-run interventions are all recorded via CLI/API and the SQLite state machine;
-- Observability Channel: runs, wbs_nodes, workers, logs, and lessons are the unified observation path for the panel and Parent;
-- Agent-Backend Channel: Pluggable Worker Agents are invoked through a unified interface, selectable and registrable at runtime;
-- Skill-Distribution Channel: Leader selects skills from the Skill library by node type and injects them into Worker prompts;
-- MCP-Tool Channel: Leader recommends specific MCP tool sets for Workers based on tool characteristics.
+Custom Backend: Implement the `AgentBackend` interface (`name`, `build_command`, `parse_output`, `default_allowed_tools`) and register it.
 
 ## Integration with Hermes
 
-The installation script creates:
+```bash
+# Direct Hermes invocation
+hermes-collab run "Task description" --cwd /path/to/project --json
 
-```text
-~/.local/bin/hermes-collab
-~/.local/bin/opc
+# Launcher mode
+opc  # Choose config → choose model → dashboard + Hermes CLI
 ```
 
-Optional integration script:
+Environment variables:
 
 ```bash
-~/hermes-collab-engine/scripts/install-hermes-integration.sh
+HERMES_COLLAB_MODEL=glm-5.1           # Global model
+HERMES_COLLAB_LEADER_MODEL=glm-5.1    # Leader model
+HERMES_COLLAB_WORKER_MODEL=kimi-k2.6  # Worker model
+ANTHROPIC_MODEL=glm-5.1               # Fallback
 ```
-
-It writes the following for Hermes:
-
-- Local Skills;
-- Memory;
-- SOUL behavior prompts;
-
-This lets Hermes know to use the collaborative engine by default when encountering implementation, analysis, debugging, auditing, research, planning, and multi-step tasks.
 
 ## Security Boundaries
 
-- Do not upload or commit run databases;
-- Do not commit `.runtime-config.json`;
-- Do not commit API Keys;
-- Do not modify user business projects;
-- Worker behavior is executed by the selected Agent CLI; set permission policies and working directories as needed.
+- Workers run in isolated subprocesses, constrained by `allowed_tools` whitelists
+- API Keys are stored only in environment variables and `~/.hermes/.env`, never written to the database
+- `git push` is restricted by the `git-write` tool profile and only available to implementation nodes
+- MCP tools are read-only by default (`mcp-readonly` profile)
 
-## Development Structure
+## Development
 
-```text
-hermes-collab-engine/
-├── hermes-collab
-├── start.sh
-├── start.py
-├── scripts/
-│   ├── install.sh
-│   └── install-hermes-integration.sh
-├── src/hermes_collab_engine/
-│   ├── agents.py
-│   ├── cli.py
-│   ├── engine.py
-│   ├── models.py
-│   ├── planner.py
-│   ├── server.py
-│   └── store.py
-├── web/
-│   └── index.html
-├── docs/
-│   ├── agent-communication-protocol.md
-│   └── self-upgrade-policy.md
-├── examples/
-│   └── im-bridge-request.md
-└── data/
-    └── .gitkeep
+```bash
+pip install -e .
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+```
+
+```
+src/hermes_collab_engine/
+├── cli.py           # CLI entry point
+├── engine.py        # Core engine
+├── server.py        # Web dashboard
+├── store.py         # SQLite persistence
+├── models.py        # Data models
+├── skills.py        # Skill distribution
+├── tools.py         # MCP tool management
+├── agents/          # Agent Backend abstraction
+├── verification.py  # v4.5 completeness check
+└── ...
+web/
+└── index.html       # Visualization dashboard
 ```
 
 ## License

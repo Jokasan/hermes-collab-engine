@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Hermes Collab Engine launcher — reads API config from ~/.hermes/ first, falls back to ~/.claude/."""
 from __future__ import annotations
 
 import json
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+HERMES_DIR = Path.home() / '.hermes'
 CLAUDE_DIR = Path.home() / '.claude'
 
 DEFAULT_MODELS = [
@@ -25,21 +27,6 @@ def load_json_lenient(path: Path):
     return json.loads(text)
 
 
-def collect_profiles():
-    profiles = []
-    settings = CLAUDE_DIR / 'settings.json'
-    if settings.exists():
-        profiles.append({'name': 'Claude Code 当前配置', 'path': str(settings), 'data': load_json_lenient(settings)})
-    profiles_dir = CLAUDE_DIR / 'profiles'
-    if profiles_dir.exists():
-        for p in sorted(profiles_dir.glob('*.json')):
-            try:
-                profiles.append({'name': p.stem, 'path': str(p), 'data': load_json_lenient(p)})
-            except Exception as e:
-                print(f'跳过无法读取的配置 {p}: {e}')
-    return profiles
-
-
 def unique(items):
     out = []
     for item in items:
@@ -48,15 +35,161 @@ def unique(items):
     return out
 
 
-def models_from(profile):
+# ── Hermes config sources ──────────────────────────────────────────────
+
+def read_hermes_env() -> dict | None:
+    """Read ~/.hermes/.env for ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL."""
+    env_path = HERMES_DIR / '.env'
+    if not env_path.exists():
+        return None
+    kv = {}
+    for line in env_path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if '=' in line:
+            k, v = line.split('=', 1)
+            kv[k.strip()] = v.strip()
+    token = kv.get('ANTHROPIC_API_KEY') or kv.get('ANTHROPIC_AUTH_TOKEN')
+    base_url = kv.get('ANTHROPIC_BASE_URL')
+    if not token or not base_url:
+        return None
+    return {'source': 'Hermes .env', 'source_path': str(env_path),
+            'base_url': base_url, 'token': token, 'models': None,
+            'default_leader': None, 'default_worker': None}
+
+
+def read_hermes_auth() -> dict | None:
+    """Read ~/.hermes/auth.json credential pool for anthropic credentials."""
+    auth_path = HERMES_DIR / 'auth.json'
+    if not auth_path.exists():
+        return None
+    try:
+        data = load_json_lenient(auth_path)
+    except Exception:
+        return None
+    pool = data.get('credential_pool', {})
+    anthropic = pool.get('anthropic', [])
+    if not anthropic:
+        return None
+    cred = anthropic[0]  # highest priority
+    base_url = cred.get('base_url')
+    if not base_url:
+        return None
+    # The actual secret is not stored in auth.json, need the env var
+    token = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')
+    if not token:
+        return None
+    return {'source': 'Hermes auth.json', 'source_path': str(auth_path),
+            'base_url': base_url, 'token': token, 'models': None,
+            'default_leader': None, 'default_worker': None}
+
+
+def read_hermes_config_yaml() -> dict | None:
+    """Read ~/.hermes/config.yaml for model.base_url and model.default."""
+    config_path = HERMES_DIR / 'config.yaml'
+    if not config_path.exists():
+        return None
+    try:
+        import yaml
+        data = yaml.safe_load(config_path.read_text(encoding='utf-8'))
+    except Exception:
+        # Fallback: simple regex parse for base_url
+        text = config_path.read_text(encoding='utf-8')
+        m = re.search(r'base_url:\s*["\']?(\S+?)["\']?\s*$', text, re.M)
+        base_url = m.group(1) if m else None
+        dm = re.search(r'default:\s*(\S+)', text)
+        default_model = dm.group(1) if dm else None
+        if not base_url:
+            return None
+        token = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')
+        if not token:
+            return None
+        return {'source': 'Hermes config.yaml', 'source_path': str(config_path),
+                'base_url': base_url, 'token': token,
+                'models': [default_model] if default_model else None,
+                'default_leader': default_model, 'default_worker': None}
+    base_url = (data.get('model') or {}).get('base_url')
+    default_model = (data.get('model') or {}).get('default')
+    if not base_url:
+        return None
+    token = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')
+    if not token:
+        return None
+    return {'source': 'Hermes config.yaml', 'source_path': str(config_path),
+            'base_url': base_url, 'token': token,
+            'models': [default_model] if default_model else None,
+            'default_leader': default_model, 'default_worker': None}
+
+
+def collect_hermes_configs():
+    """Try Hermes config sources in priority order."""
+    sources = []
+    for reader in (read_hermes_env, read_hermes_config_yaml, read_hermes_auth):
+        result = reader()
+        if result:
+            sources.append(result)
+    return sources
+
+
+# ── Claude config sources (fallback) ───────────────────────────────────
+
+def collect_claude_profiles():
+    profiles = []
+    settings = CLAUDE_DIR / 'settings.json'
+    if settings.exists():
+        try:
+            profiles.append({'name': 'Claude Code 当前配置', 'path': str(settings),
+                             'data': load_json_lenient(settings)})
+        except Exception:
+            pass
+    profiles_dir = CLAUDE_DIR / 'profiles'
+    if profiles_dir.exists():
+        for p in sorted(profiles_dir.glob('*.json')):
+            try:
+                profiles.append({'name': p.stem, 'path': str(p),
+                                 'data': load_json_lenient(p)})
+            except Exception:
+                pass
+    return profiles
+
+
+def models_from_claude(profile):
     data = profile['data']
     env = data.get('env', {})
     models = []
-    for key in ['ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL']:
+    for key in ['ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+                'ANTHROPIC_DEFAULT_HAIKU_MODEL']:
         models.append(env.get(key))
     models.extend(data.get('availableModels') or [])
     return unique(models)
 
+
+def get_config_from_claude():
+    profiles = collect_claude_profiles()
+    if not profiles:
+        return None
+    labels = []
+    for p in profiles:
+        env = p['data'].get('env', {})
+        labels.append(f"{p['name']} | {env.get('ANTHROPIC_BASE_URL','未设置 BaseURL')} | 模型数 {len(models_from_claude(p))}")
+    selected = choose('选择 Claude 配置来源', labels)
+    profile = profiles[labels.index(selected)]
+    env = profile['data'].get('env', {})
+    token = env.get('ANTHROPIC_AUTH_TOKEN') or env.get('ANTHROPIC_API_KEY')
+    base_url = env.get('ANTHROPIC_BASE_URL')
+    models = models_from_claude(profile)
+    if not token or not base_url:
+        print('该配置缺少 BaseURL 或 API Key。')
+        return None
+    return {'source': profile['name'], 'source_path': profile['path'],
+            'base_url': base_url, 'token': token,
+            'models': models or DEFAULT_MODELS,
+            'default_leader': env.get('ANTHROPIC_DEFAULT_OPUS_MODEL'),
+            'default_worker': env.get('ANTHROPIC_DEFAULT_SONNET_MODEL')}
+
+
+# ── UI helpers ─────────────────────────────────────────────────────────
 
 def choose(label, items, default=1):
     print(f'\n{label}')
@@ -91,32 +224,49 @@ def choose_interaction_mode():
     return 'cli' if 'Hermes 命令行' in choice else 'web'
 
 
-def get_config_from_files():
-    profiles = collect_profiles()
-    if not profiles:
-        print('未找到 Claude/Hermes 本机配置文件。')
+# ── Config selection ───────────────────────────────────────────────────
+
+def get_config_from_hermes():
+    """Auto-detect from ~/.hermes/ — merge .env + config.yaml for best result."""
+    env_cfg = read_hermes_env()
+    yaml_cfg = read_hermes_config_yaml()
+    auth_cfg = read_hermes_auth()
+
+    # Collect all unique sources found
+    found = [c for c in (env_cfg, yaml_cfg, auth_cfg) if c]
+    if not found:
         return None
-    labels = []
-    for p in profiles:
-        env = p['data'].get('env', {})
-        labels.append(f"{p['name']} | {env.get('ANTHROPIC_BASE_URL','未设置 BaseURL')} | 模型数 {len(models_from(p))}")
-    selected = choose('选择本机配置来源', labels)
-    profile = profiles[labels.index(selected)]
-    env = profile['data'].get('env', {})
-    token = env.get('ANTHROPIC_AUTH_TOKEN') or env.get('ANTHROPIC_API_KEY')
-    base_url = env.get('ANTHROPIC_BASE_URL')
-    models = models_from(profile)
-    if not token or not base_url:
-        print('该配置缺少 BaseURL 或 API Key。')
+
+    # Merge: prefer .env for secrets, config.yaml for models
+    base_url = None
+    token = None
+    models = None
+    default_leader = None
+    default_worker = None
+    source_parts = []
+
+    for cfg in found:
+        if cfg.get('base_url') and not base_url:
+            base_url = cfg['base_url']
+        if cfg.get('token') and not token:
+            token = cfg['token']
+        if cfg.get('models') and not models:
+            models = cfg['models']
+        if cfg.get('default_leader') and not default_leader:
+            default_leader = cfg['default_leader']
+        source_parts.append(cfg['source'])
+
+    if not base_url or not token:
         return None
+
     return {
-        'source': profile['name'],
-        'source_path': profile['path'],
+        'source': ' + '.join(source_parts),
+        'source_path': found[0].get('source_path', ''),
         'base_url': base_url,
         'token': token,
         'models': models or DEFAULT_MODELS,
-        'default_leader': env.get('ANTHROPIC_DEFAULT_OPUS_MODEL'),
-        'default_worker': env.get('ANTHROPIC_DEFAULT_SONNET_MODEL'),
+        'default_leader': default_leader,
+        'default_worker': default_worker,
     }
 
 
@@ -129,24 +279,49 @@ def get_config_manual():
     if not base_url or not token or not models:
         raise SystemExit('手动配置不完整。')
     return {
-        'source': '手动输入',
-        'source_path': '',
-        'base_url': base_url,
-        'token': token,
+        'source': '手动输入', 'source_path': '',
+        'base_url': base_url, 'token': token,
         'models': models,
         'default_leader': models[0],
-        'default_worker': models[min(1, len(models)-1)],
+        'default_worker': models[min(1, len(models) - 1)],
     }
 
 
+# ── Main ───────────────────────────────────────────────────────────────
+
 def stop_existing_server():
-    subprocess.run(['pkill', '-f', 'src.hermes_collab_engine.cli server'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(['pkill', '-f', 'src.hermes_collab_engine.cli server'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():
-    print('⚕ Hermes 协同引擎启动器')
-    mode = choose('API 配置方式', ['自动读取本机 Claude/Hermes 配置文件', '手动填写 BaseURL、API Key 和模型名称'], 1)
-    cfg = get_config_from_files() if mode.startswith('自动') else get_config_manual()
+    print('⚕ Hermes 协同引擎启动器 v4.5')
+
+    # Build config source options dynamically
+    hermes_auto = get_config_from_hermes()
+    claude_profiles = collect_claude_profiles()
+    has_claude = len(claude_profiles) > 0
+
+    options = []
+    if hermes_auto:
+        options.append(f'自动读取 Hermes 配置（{hermes_auto["source"]}）')
+    if has_claude:
+        options.append('读取 Claude Code 配置文件')
+    options.append('手动填写 BaseURL、API Key 和模型名称')
+
+    mode = choose('API 配置方式', options, 1)
+
+    cfg = None
+    if hermes_auto and mode.startswith('自动读取 Hermes'):
+        cfg = hermes_auto
+        print(f'已从 Hermes 配置加载：{cfg["source"]}')
+        print(f'  BaseURL: {cfg["base_url"]}')
+        print(f'  模型: {", ".join(cfg["models"][:5])}{"..." if len(cfg["models"]) > 5 else ""}')
+    elif has_claude and mode.startswith('读取 Claude'):
+        cfg = get_config_from_claude()
+    else:
+        cfg = get_config_manual()
+
     if cfg is None:
         print('自动读取失败，切换为手动填写。')
         cfg = get_config_manual()
@@ -156,7 +331,7 @@ def main():
     default_worker = models.index(cfg['default_worker']) + 1 if cfg.get('default_worker') in models else min(2, len(models))
 
     leader_model = choose('选择 Leader Agent（Hermes 命令行 / 规划与聚合大脑）模型', models, default_leader)
-    worker_model = choose('选择 Worker Agent（Claude Code 执行器大脑）模型', models, default_worker)
+    worker_model = choose('Worker Agent（执行器大脑）模型', models, default_worker)
 
     host = prompt('\n管理面板监听地址', '0.0.0.0')
     port = prompt('管理面板监听端口', '8765')
@@ -172,7 +347,8 @@ def main():
         'port': int(port),
         'cwd': cwd,
     }
-    (ROOT / '.runtime-config.json').write_text(json.dumps(runtime, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT / '.runtime-config.json').write_text(
+        json.dumps(runtime, ensure_ascii=False, indent=2), encoding='utf-8')
 
     run_env = os.environ.copy()
     run_env['ANTHROPIC_AUTH_TOKEN'] = cfg['token']
@@ -189,7 +365,7 @@ def main():
     ]
 
     print('\n启动配置：')
-    safe_runtime = dict(runtime)
+    safe_runtime = {k: v for k, v in runtime.items() if k != 'token'}
     print(json.dumps(safe_runtime, ensure_ascii=False, indent=2))
 
     print('\n正在启动协同引擎管理面板...')
@@ -197,7 +373,8 @@ def main():
     log_path = ROOT / 'data' / 'server.log'
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open('a', encoding='utf-8')
-    server = subprocess.Popen(server_cmd, env=run_env, cwd=ROOT, stdout=log_file, stderr=subprocess.STDOUT)
+    server = subprocess.Popen(server_cmd, env=run_env, cwd=ROOT,
+                              stdout=log_file, stderr=subprocess.STDOUT)
     time.sleep(1.5)
     if server.poll() is not None:
         print(f'管理面板启动失败，请查看日志：{log_path}')
