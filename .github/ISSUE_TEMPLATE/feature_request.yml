@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a focused improvement or contributor milestone
+title: "[Feature]: "
+labels: [enhancement, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please keep proposals small enough to review. For broad ideas, describe the first safe milestone.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user workflow
+      description: What user need should this solve?
+      placeholder: As a maintainer reviewing worker results, I need...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful behavior change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include workarounds or smaller variants if any.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Dashboard/API
+        - Sandbox
+        - Agent backend
+        - Skills/tools
+        - Documentation/localization
+        - Security/operations
+        - Release process
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Suggested verification
+      description: What command, screenshot, or docs check would prove this works?
+      placeholder: `PYTHONPATH=src python3 -m unittest ...`
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and compatibility impact
+      description: Note effects on secrets, dashboard exposure, worker execution, data retention, localization, or public APIs.
+    validations:
+      required: true

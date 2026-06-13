@@ -1,0 +1,45 @@
+name: Documentation or localization
+description: Report missing, confusing, or untranslated documentation
+title: "[Docs]: "
+labels: [documentation, needs-triage]
+body:
+  - type: textarea
+    id: page
+    attributes:
+      label: Affected page or file
+      placeholder: README.md, README.en.md, README.ja.md, sandbox/README.md, docs/releases/v5.0.0.md
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - Chinese
+        - English
+        - Japanese
+        - Multiple languages
+        - Not language-specific
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is confusing or missing?
+      description: Include the command, workflow, or section that needs clarification.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change
+      description: Optional draft wording or structure.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked whether related README translations also need updates.
+          required: false
+        - label: I did not include secrets, private logs, or runtime data.
+          required: true

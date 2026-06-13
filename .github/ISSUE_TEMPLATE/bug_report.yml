@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem in Hermes Collab Engine
+title: "[Bug]: "
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include API keys, auth files, private prompts, customer data, or runtime SQLite files.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: The dashboard run detail page...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest local or sandbox steps that reproduce the issue.
+      placeholder: |
+        1. Run `./scripts/start_sandbox.sh`
+        2. Open `http://127.0.0.1:8876/`
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include sanitized logs or screenshots if helpful.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v5.0.0 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Dashboard/API
+        - Sandbox
+        - Agent backend
+        - Skills/tools
+        - Documentation/localization
+        - Install/release
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, browser, command, and relevant local-only configuration.
+      placeholder: Linux, Python 3.11, Firefox, `PYTHONPATH=src ...`
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed secrets, tokens, private prompts, customer data, and local paths that should not be public.
+          required: true
+        - label: This is not a security vulnerability report. If it is, I will follow SECURITY.md instead.
+          required: true
