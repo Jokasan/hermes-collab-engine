@@ -9,6 +9,7 @@
 #   ./scripts/start_sandbox.sh 0.5          # 运行 30 分钟
 #   ./scripts/start_sandbox.sh --hours 8    # 8 小时
 #   ./scripts/start_sandbox.sh --port 8877  # 自定义端口
+#   ./scripts/start_sandbox.sh --real       # 隔离数据库/工作区中启用真实 worker（默认最多 2 个任务）
 #   HOURS=3 ./scripts/start_sandbox.sh      # 环境变量
 
 set -euo pipefail
@@ -20,6 +21,17 @@ HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8876}"
 DB="${DB:-data/demo_sandbox.sqlite3}"
 RESEED="${RESEED:-1}"  # 1=每次启动重置数据；0=保留
+REAL="${HERMES_SANDBOX_REAL_EXECUTION:-0}"
+REAL_LIMIT="${HERMES_SANDBOX_REAL_RUN_LIMIT:-2}"
+WORKSPACE="${HERMES_SANDBOX_WORKSPACE:-data/sandbox_workspace}"
+SANDBOX_MARKER_FILENAME=".hermes-collab-sandbox-workspace"
+
+require_value() {
+  if [[ $# -lt 2 || -z "${2:-}" ]]; then
+    echo "缺少参数值：$1" >&2
+    exit 2
+  fi
+}
 
 # ---------- 解析参数 ----------
 while [[ $# -gt 0 ]]; do
@@ -28,10 +40,13 @@ while [[ $# -gt 0 ]]; do
       sed -n '2,12p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
-    --hours)   HOURS="$2"; shift 2 ;;
-    --host)    HOST="$2";  shift 2 ;;
-    --port)    PORT="$2";  shift 2 ;;
-    --db)      DB="$2";    shift 2 ;;
+    --hours)   require_value "$@"; HOURS="$2"; shift 2 ;;
+    --host)    require_value "$@"; HOST="$2";  shift 2 ;;
+    --port)    require_value "$@"; PORT="$2";  shift 2 ;;
+    --db)      require_value "$@"; DB="$2";    shift 2 ;;
+    --real)    REAL=1; RESEED=0; shift ;;
+    --real-limit) require_value "$@"; REAL_LIMIT="$2"; shift 2 ;;
+    --workspace) require_value "$@"; WORKSPACE="$2"; shift 2 ;;
     --no-reseed) RESEED=0; shift ;;
     --interactive|-i)
       # 交互式询问运行时长
@@ -48,6 +63,7 @@ done
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." &>/dev/null && pwd)"
 cd "$REPO_ROOT"
+WORKSPACE="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$WORKSPACE")"
 
 # ---------- 校验 ----------
 if [[ ! -f sandbox/server.py ]]; then
@@ -63,13 +79,36 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 # 小时数转秒（支持小数）
-SECS="$(python3 -c "h=float('$HOURS'); print(int(h*3600)) if h>0 else 0" 2>/dev/null || echo 0)"
+SECS="$(python3 -c 'import sys
+try:
+    h = float(sys.argv[1])
+except ValueError:
+    print(0)
+else:
+    print(int(h * 3600) if h > 0 else 0)' "$HOURS")"
 if [[ "$SECS" -le 0 ]]; then
   echo "✗ 无效的运行小时数：$HOURS（必须 > 0）" >&2; exit 2
 fi
 if [[ "$SECS" -gt 86400 ]]; then
   echo "⚠ 运行时长超过 24 小时（${HOURS}h），如确认请用环境变量 HERMES_SANDBOX_FORCE=1 跳过该提醒"
   if [[ "${HERMES_SANDBOX_FORCE:-0}" != "1" ]]; then exit 2; fi
+fi
+
+if [[ ! "$PORT" =~ ^[0-9]+$ || "$PORT" -lt 1 || "$PORT" -gt 65535 ]]; then
+  echo "✗ 无效的端口：$PORT（必须是 1-65535 的整数）" >&2; exit 2
+fi
+if [[ ! "$REAL_LIMIT" =~ ^[0-9]+$ ]]; then
+  echo "✗ 无效的真实任务额度：$REAL_LIMIT（必须是非负整数）" >&2; exit 2
+fi
+if [[ "$REAL" == "1" ]]; then
+  case "$WORKSPACE" in
+    "$REPO_ROOT"|"$REPO_ROOT/"|"$HOME"|"$HOME/"|/)
+      echo "✗ 拒绝使用受保护目录作为真实沙盒工作区：$WORKSPACE" >&2; exit 2 ;;
+  esac
+  case "$WORKSPACE" in
+    "$REPO_ROOT"/data/sandbox_workspace|"$REPO_ROOT"/data/sandbox_workspace/*) ;;
+    *) echo "✗ 真实沙盒工作区必须位于 $REPO_ROOT/data/sandbox_workspace 内：$WORKSPACE" >&2; exit 2 ;;
+  esac
 fi
 
 # ---------- 端口占用检查 ----------
@@ -81,7 +120,10 @@ fi
 
 # ---------- 准备数据 ----------
 mkdir -p data logs
-if [[ "$RESEED" == "1" ]]; then
+if [[ "$REAL" == "1" ]]; then
+  if [[ "$DB" == "data/demo_sandbox.sqlite3" ]]; then DB="data/sandbox_real.sqlite3"; fi
+  echo "▶ 启用真实沙盒执行：独立数据库 $DB，独立工作区 $WORKSPACE，额度 ${REAL_LIMIT} 个任务"
+elif [[ "$RESEED" == "1" ]]; then
   echo "▶ 重置脱敏演示数据 → $DB"
   python3 scripts/seed_demo_data.py --db "$DB" --reset
 else
@@ -98,6 +140,11 @@ echo
 echo "▶ 启动 Hermes 协同引擎沙盒"
 echo "  地址：http://${HOST}:${PORT}/"
 echo "  数据：${DB}（脱敏）"
+if [[ "$REAL" == "1" ]]; then
+  echo "  模式：真实沙盒执行（隔离 DB / 隔离工作区 / 不写生产库）"
+  echo "  工作区：${WORKSPACE}"
+  echo "  任务额度：${REAL_LIMIT}"
+fi
 echo "  日志：${LOG_FILE}"
 echo "  运行时长：${HOURS} 小时（${SECS} 秒）"
 echo "  Ctrl+C 可随时手动停止"
@@ -105,9 +152,16 @@ echo
 
 export HERMES_SANDBOX_DB="$DB"
 export HERMES_SANDBOX_MOCK_CONFIG="${HERMES_SANDBOX_MOCK_CONFIG:-config/sandbox-mocks.json}"
+export HERMES_SANDBOX_REAL_EXECUTION="$REAL"
+export HERMES_SANDBOX_REAL_RUN_LIMIT="$REAL_LIMIT"
+export HERMES_SANDBOX_WORKSPACE="$WORKSPACE"
+export HERMES_SANDBOX_AGGREGATE="${HERMES_SANDBOX_AGGREGATE:-1}"
+export HERMES_SANDBOX_TTL_SECONDS="$SECS"
 
 # 后台启动 server，捕获 PID
-python3 sandbox/server.py --host "$HOST" --port "$PORT" >"$LOG_FILE" 2>&1 &
+SERVER_ARGS=(sandbox/server.py --host "$HOST" --port "$PORT" --ttl-seconds "$SECS")
+if [[ "$REAL" == "1" ]]; then SERVER_ARGS+=(--real --workspace "$WORKSPACE"); fi
+python3 "${SERVER_ARGS[@]}" >"$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
 cleanup() {
